@@ -38,5 +38,8 @@ coverage/
 *.dll
 *.ico
 
+# 密钥（不上传仓库）
+token.txt
+
 # 临时文件
 *.tmp

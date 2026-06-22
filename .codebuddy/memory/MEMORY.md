@@ -40,10 +40,23 @@ app/
 ```
 
 ## 自动更新部署流程
-1. 将 `dist-electron/` 中 `latest.yml` + `Setup.exe` + `.blockmap` 上传到静态服务器
-2. 客户端启动后5秒静默检查 `latest.yml`
-3. 发现新版本 → 顶部通知栏显示 → 用户可手动下载安装
-4. 更新失败时自动保留旧版本，不影响正常使用
+1. 构建 `npm run build` → 打包 `npx electron-builder --win`（不用 ELECTRON_MIRROR，直接 GitHub 源）
+2. 发布到 GitHub Releases：`npx electron-builder --win --publish always`（需 GH_TOKEN）
+3. GH_TOKEN 必须是 Classic Token（Fine-grained 会 403）
+4. Release 页面：https://github.com/xiaocaihappy/xingbao-warehouse/releases
+5. 客户端启动后5秒静默检查 `latest.yml`
+6. 发现新版本 → 顶部通知栏显示 → 用户可手动下载安装
+
+## GitHub 仓库
+- 仓库地址：https://github.com/xiaocaihappy/xingbao-warehouse
+- 分支：main
+- SSH 密钥已配置，使用 ssh.github.com:443 绕过防火墙
+- Classic PAT Token（repo 权限）用于发布 Release
+
+## v1.1.0 已发布
+- Release: https://github.com/xiaocaihappy/xingbao-warehouse/releases/tag/v1.1.0
+- 安装包: xingbao-warehouse-setup-1.1.0.exe (101.2 MB)
+- 包含: .exe + .blockmap + latest.yml
 
 ## 已知问题
 - NSIS 打包时需确保无进程占用 `dist-electron` 目录（EPERM 错误）
