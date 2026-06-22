@@ -1,11 +1,30 @@
 const { autoUpdater } = require('electron-updater');
 const { app, dialog } = require('electron');
 
+// 显式设置更新源（GitHub Releases），防止 electron-updater 无法自动解析 app-update.yml
+autoUpdater.setFeedURL({
+  provider: 'github',
+  owner: 'xiaocaihappy',
+  repo: 'xingbao-warehouse',
+  vPrefixedTagName: true,
+  releaseType: 'release',
+});
+
 // 配置 autoUpdater
 autoUpdater.autoDownload = false;          // 手动控制下载时机
 autoUpdater.autoInstallOnAppQuit = true;  // 退出时自动安装
 autoUpdater.allowDowngrade = false;
 autoUpdater.disableWebInstaller = true;    // NSIS 不使用 web installer
+
+// 添加日志（方便排查问题）
+autoUpdater.logger = {
+  info: (...args) => console.log('[Updater]', ...args),
+  warn: (...args) => console.warn('[Updater]', ...args),
+  error: (...args) => console.error('[Updater]', ...args),
+  debug: (...args) => console.log('[Updater:debug]', ...args),
+  verbose: (...args) => console.log('[Updater:verbose]', ...args),
+  silly: (...args) => console.log('[Updater:silly]', ...args),
+};
 
 let mainWindow = null;
 let updateCheckTimer = null;
@@ -69,6 +88,7 @@ autoUpdater.on('update-downloaded', (info) => {
 // 发生错误
 autoUpdater.on('error', (err) => {
   const message = err?.message || String(err);
+  console.error('[Updater] autoUpdater error:', message, err?.stack || '');
 
   // 开发环境下忽略
   if (message.includes('dev-app-update.yml') || message.includes('ERR_INVALID_ARG_TYPE')) {
@@ -89,6 +109,7 @@ autoUpdater.on('error', (err) => {
 
 // 启动后台静默检查
 async function checkForUpdates(silent = false) {
+  console.log(`[Updater] 检查更新 (silent=${silent}, isPackaged=${app.isPackaged}, currentVersion=${app.getVersion()})`);
   if (!app.isPackaged && !silent) {
     sendStatus({ event: 'idle', devMode: true });
     return;
@@ -96,8 +117,10 @@ async function checkForUpdates(silent = false) {
   _isSilent = silent;
   try {
     sendStatus({ event: silent ? 'idle' : 'checking' });
-    await autoUpdater.checkForUpdates();
+    const result = await autoUpdater.checkForUpdates();
+    console.log('[Updater] checkForUpdates 完成:', JSON.stringify(result?.updateInfo?.version || 'no update info'));
   } catch (err) {
+    console.error('[Updater] checkForUpdates 异常:', err?.message || err);
     if (!silent) {
       sendStatus({ event: 'error', message: err?.message || '检查失败' });
     } else {

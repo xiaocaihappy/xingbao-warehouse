@@ -11,8 +11,6 @@ const THEME_PRESETS = [
 const THEME_KEY = 'xingbao_theme';
 const DISPLAY_NAME_KEY = 'xingbao_display_name';
 
-const APP_VERSION = '1.1.0';
-
 export default function Settings({ user, onLogout, onSwitchAccount }) {
   const [displayName, setDisplayName] = useState(
     () => localStorage.getItem(DISPLAY_NAME_KEY) || user?.user_metadata?.display_name || ''
@@ -23,7 +21,17 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
   const [nicknameSaved, setNicknameSaved] = useState(false);
   const [updateStatus, setUpdateStatus] = useState({ event: 'idle' });
   const [toast, setToast] = useState(null);
+  const [appVersion, setAppVersion] = useState('');
   const unsubRef = useRef(null);
+
+  // 获取应用版本号
+  useEffect(() => {
+    if (window.electronAPI?.getAppVersion) {
+      window.electronAPI.getAppVersion().then(setAppVersion).catch(() => setAppVersion('未知'));
+    } else {
+      setAppVersion('开发模式');
+    }
+  }, []);
 
   // 加载 + 监听更新状态
   useEffect(() => {
@@ -178,7 +186,7 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
             {updateStatus.event === 'error' && `⚠ ${updateStatus.message || '检查失败'}`}
             {updateStatus.event === 'progress' && `⬇ 下载中 ${updateStatus.percent || 0}%`}
             {updateStatus.event === 'downloaded' && '✅ 下载完成，重启后生效'}
-            {(updateStatus.event === 'idle' || updateStatus.event === 'checking') && `检查并安装最新版本，当前版本 v${APP_VERSION}`}
+            {(updateStatus.event === 'idle' || updateStatus.event === 'checking') && `检查并安装最新版本，当前版本 v${appVersion}`}
             {updateStatus.event === 'available' && `发现新版本 v${updateStatus.version}`}
           </p>
           <div className="settings-input-row">

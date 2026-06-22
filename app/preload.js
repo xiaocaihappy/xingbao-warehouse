@@ -17,4 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   // 安装并重启
   installUpdate: () => ipcRenderer.invoke('update:install'),
+
+  // 获取当前应用版本号
+  getAppVersion: () => ipcRenderer.invoke('app:version'),
 });

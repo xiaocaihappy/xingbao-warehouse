@@ -117,6 +117,7 @@ app.whenReady().then(() => {
     ipcMain.handle('update:check', async () => { await updater.checkForUpdates(); });
     ipcMain.handle('update:download', async () => { await updater.downloadUpdate(); });
     ipcMain.handle('update:install', () => { updater.installAndRestart(); });
+    ipcMain.handle('app:version', () => app.getVersion());
 
     // 启动后台定时检查（每24小时）
     updater.startPeriodicCheck();
