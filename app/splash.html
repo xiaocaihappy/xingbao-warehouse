@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>星堡移印仓储系统 - 启动中</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0f131a;
+      font-family: 'Inter', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: drag;
+    }
+    .splash-container {
+      text-align: center;
+      animation: fadeIn 0.5s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .splash-logo {
+      width: 56px;
+      height: auto;
+      max-height: 56px;
+      margin: 0 auto 24px;
+      display: block;
+      object-fit: contain;
+      box-shadow: 0 0 32px rgba(0, 200, 255, 0.3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 24px rgba(0, 200, 255, 0.3); }
+      50% { box-shadow: 0 0 48px rgba(0, 200, 255, 0.6); }
+    }
+    .splash-title {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #00c8ff, #00e5c0, #8b5cf6);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+    .splash-subtitle {
+      font-size: 14px;
+      color: rgba(255,255,255,0.4);
+      letter-spacing: 1px;
+      margin-bottom: 32px;
+    }
+    .splash-loader {
+      width: 200px;
+      height: 3px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+    .splash-loader-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #00c8ff, #00e5c0);
+      border-radius: 2px;
+      width: 0%;
+      animation: loading 2.5s ease-in-out infinite;
+    }
+    @keyframes loading {
+      0% { width: 0%; }
+      40% { width: 70%; }
+      70% { width: 85%; }
+      100% { width: 95%; }
+    }
+    .splash-status {
+      margin-top: 16px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="splash-container">
+    <img class="splash-logo" src="XBlogo.png" alt="星堡" />
+    <h1 class="splash-title">星堡移印样品</h1>
+    <p class="splash-subtitle">仓储系统 · 正在启动</p>
+    <div class="splash-loader">
+      <div class="splash-loader-bar"></div>
+    </div>
+    <p class="splash-status">加载中，请稍候...</p>
+  </div>
+</body>
+</html>

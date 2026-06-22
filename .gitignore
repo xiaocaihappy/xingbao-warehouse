@@ -1,0 +1,42 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+dist-electron/
+
+# 环境变量
+.env
+.env.local
+.env.production
+
+# 日志
+*.log
+npm-debug.log*
+
+# 系统文件
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 测试
+coverage/
+
+# 二进制文件
+*.exe
+*.blockmap
+*.pak
+*.dll
+*.ico
+
+# 临时文件
+*.tmp
