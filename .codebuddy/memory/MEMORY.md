@@ -53,10 +53,18 @@ app/
 - SSH 密钥已配置，使用 ssh.github.com:443 绕过防火墙
 - Classic PAT Token（repo 权限）用于发布 Release
 
-## v1.1.0 已发布
-- Release: https://github.com/xiaocaihappy/xingbao-warehouse/releases/tag/v1.1.0
-- 安装包: xingbao-warehouse-setup-1.1.0.exe (101.2 MB)
-- 包含: .exe + .blockmap + latest.yml
+## ⚠️ 版本号规则（严格）
+- **每次修改必须升级版本号**，例如 1.1.0 → 1.1.1，否则 autoUpdater 不会推送更新
+- 发布前必须：修改 `app/package.json` 的 `version` 字段
+
+## 发布流程
+1. 修改 `app/package.json` 版本号
+2. 双击 `发布.bat` 一键构建 + 推送 Tag + 打包 + 发布到 GitHub Releases
+3. 发布.bat 会自动读取 version 并推送 git tag
+
+## v1.1.1 已发布
+- Release: https://github.com/xiaocaihappy/xingbao-warehouse/releases/tag/v1.1.1
+- 更新内容：亮青主题下渠道标签文字改为黑色
 
 ## 已知问题
 - NSIS 打包时需确保无进程占用 `dist-electron` 目录（EPERM 错误）

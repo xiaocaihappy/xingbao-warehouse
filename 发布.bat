@@ -28,6 +28,21 @@ if %errorlevel% neq 0 (
 echo ✅ 前端构建完成
 echo.
 
+:: 读取版本号并推送 Git Tag
+for /f "tokens=2 delims=:," %%a in ('findstr "version" package.json') do (
+    set APP_VERSION=%%~a
+)
+set APP_VERSION=%APP_VERSION: =%
+echo 版本号: %APP_VERSION%
+cd ..
+git tag v%APP_VERSION%
+git push origin v%APP_VERSION%
+if %errorlevel% neq 0 (
+    echo ⚠ Tag 推送失败（可能已存在），继续...
+)
+cd app
+
+echo.
 echo [2/2] 打包并发布到 GitHub Releases...
 call npx electron-builder --win --publish always
 if %errorlevel% neq 0 (
