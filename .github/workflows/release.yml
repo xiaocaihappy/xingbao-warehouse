@@ -1,4 +1,4 @@
-﻿name: Build and Release
+name: Build and Release
 
 on:
   push:
@@ -31,8 +31,9 @@ jobs:
           cache-dependency-path: app/package-lock.json
 
       - name: Create placeholder token.txt (extraResources needs it)
+        shell: pwsh
         run: |
-          echo # placeholder > token.txt
+          "# placeholder" | Out-File -FilePath token.txt -Encoding utf8
 
       - name: Install dependencies
         working-directory: app
