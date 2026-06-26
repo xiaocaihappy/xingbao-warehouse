@@ -1,6 +1,6 @@
 {
   "name": "xingbao-warehouse",
-  "version": "1.1.2",
+  "version": "1.1.9",
   "description": "星堡移印样品仓储系统",
   "main": "main.js",
   "author": {
@@ -37,7 +37,7 @@
     "appId": "com.xingbao.warehouse",
     "productName": "星堡移印仓储系统",
     "directories": {
-      "output": "dist-electron"
+      "output": "release-build"
     },
     "files": [
       "main.js",

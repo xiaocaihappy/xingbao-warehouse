@@ -5,19 +5,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
 
   // ===== 自动更新 API =====
-  // 监听更新状态变化
   onUpdateStatus: (callback) => {
     const handler = (_event, status) => callback(status);
     ipcRenderer.on('update:status', handler);
     return () => ipcRenderer.removeListener('update:status', handler);
   },
-  // 手动检查更新
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
-  // 开始下载
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
-  // 安装并重启
   installUpdate: () => ipcRenderer.invoke('update:install'),
-
-  // 获取当前应用版本号
   getAppVersion: () => ipcRenderer.invoke('app:version'),
+
+  // 诊断相关
+  onDiagnosticLog: (callback) => {
+    const handler = (_event, entry) => callback(entry);
+    ipcRenderer.on('diagnostic:log', handler);
+    return () => ipcRenderer.removeListener('diagnostic:log', handler);
+  },
+  runDiagnose: () => ipcRenderer.invoke('diagnose:run'),
+  cleanupUpdateCache: () => ipcRenderer.invoke('update:cleanup-cache'),
+
+  // ===== 窗口关闭 API =====
+  onCloseRequest: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('window:close-request', handler);
+    return () => ipcRenderer.removeListener('window:close-request', handler);
+  },
+  confirmClose: (action) => ipcRenderer.send('window:close-confirm', action),
+
+  // ===== Excel 导出 API =====
+  exportExcel: (items) => ipcRenderer.invoke('export:excel', items),
 });
