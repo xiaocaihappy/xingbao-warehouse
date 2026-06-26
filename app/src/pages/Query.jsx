@@ -111,60 +111,46 @@ export default function Query({ onStatsChange }) {
     else { showToast('图片上传失败', 'error'); }
   }
 
-  // 导出全部数据（含图片ZIP打包）
+  // 导出全部数据（Excel .xlsx 含嵌入图片，通过主进程生成）
   async function exportCSV() {
     if (safeItems.length === 0) { showToast('无数据可导出', 'error'); return; }
-    const headers = ['货架号', '移印编号', '销售', '人员', '格子号', '产品货号', '图片链接', '创建时间'];
-    const rows = safeItems.map(i => [
-      i.shelf_number, i.stamp_code, i.sales_channel, i.staff_name,
-      i.grid_number, i.product_code, i.image_url || '', i.created_at
-    ]);
-    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','))].join('\n');
+    const dateStr = new Date().toISOString().slice(0, 10);
 
-    const withImages = safeItems.filter(i => i.image_url && i.image_url !== 'EMPTY');
-    if (withImages.length === 0) {
-      // 无图片时只导出CSV
-      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `星堡移印样品_${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      showToast(`已导出 ${safeItems.length} 条数据（无图片）`, 'success');
-      return;
-    }
+    // 准备数据（不含图片 buffer，只传 URL 由主进程下载）
+    const items = safeItems.map(i => ({
+      id: i.id,
+      shelf_number: i.shelf_number,
+      stamp_code: i.stamp_code,
+      sales_channel: i.sales_channel,
+      staff_name: i.staff_name,
+      grid_number: i.grid_number,
+      product_code: i.product_code,
+      image_url: i.image_url,
+      created_at: i.created_at,
+    }));
 
-    showToast(`正在打包 ${withImages.length} 张图片...`, 'success');
+    const withImagesCount = items.filter(i => i.image_url && i.image_url !== 'EMPTY').length;
+    showToast(`正在生成 Excel${withImagesCount > 0 ? '（含 ' + withImagesCount + ' 张图片）' : ''}...`, 'success');
+
     try {
-      const zip = new JSZip();
-      zip.file(`星堡移印样品_${new Date().toISOString().slice(0, 10)}.csv`, '\uFEFF' + csv);
-      const imgFolder = zip.folder('images');
+      const result = await window.electronAPI.exportExcel(items);
+      if (!result.success) {
+        showToast('Excel 生成失败: ' + (result.error || '未知错误'), 'error');
+        return;
+      }
 
-      const imgPromises = withImages.map(async (item, idx) => {
-        try {
-          const resp = await fetch(item.image_url);
-          if (resp.ok) {
-            const blob = await resp.blob();
-            const ext = blob.type === 'image/png' ? 'png' : 'jpg';
-            const safeName = `${item.stamp_code || 'unknown'}_${item.shelf_number || 'no-shelf'}_${idx}`.replace(/[\\/:*?"<>|]/g, '_');
-            imgFolder.file(`${safeName}.${ext}`, blob);
-          }
-        } catch (e) { /* 图片下载失败跳过 */ }
+      // 创建 Blob 并触发下载
+      const blob = new Blob([result.buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
-      await Promise.all(imgPromises);
-
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(zipBlob);
-      link.download = `星堡移印样品_含图片_${new Date().toISOString().slice(0, 10)}.zip`;
-      link.click();
-      showToast(`已导出 ${safeItems.length} 条数据 + ${withImages.length} 张图片`, 'success');
-    } catch (e) {
-      showToast('图片打包失败，已导出CSV: ' + e.message, 'error');
-      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `星堡移印样品_${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `星堡移印样品_${dateStr}.xlsx`;
       link.click();
+
+      showToast(`已导出 ${safeItems.length} 条数据（含图片的 .xlsx）`, 'success');
+    } catch (e) {
+      showToast('导出失败: ' + (e.message || '未知错误'), 'error');
     }
   }
 
@@ -252,8 +238,8 @@ export default function Query({ onStatsChange }) {
 
       {/* 操作按钮 */}
       <div className="action-bar">
-        <button className="btn btn-outline btn-sm" onClick={exportCSV} title="导出全部数据为 CSV">
-          <span className="btn-icon">📊</span> 导出全部数据
+        <button className="btn btn-outline btn-sm" onClick={exportCSV} title="导出Excel .xlsx（图片嵌入表格）">
+          <span className="btn-icon">📊</span> 导出Excel(含图片)
         </button>
         <button className="btn btn-outline btn-sm" onClick={exportImages} title="生成图片预览 HTML">
           <span className="btn-icon">🖼</span> 导出所有图片

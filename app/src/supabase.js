@@ -3,7 +3,41 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kxtsomnzksxqkuhieqxg.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+    reconnectAfterMs: (tries) => {
+      if (tries > 3) return 60000;
+      return [3000, 8000, 15000][tries - 1] || 60000;
+    },
+  },
+  global: {
+    headers: { 'X-Client-Info': 'xingbao-warehouse' },
+    fetch: (url, options = {}) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      return fetch(url, {
+        ...options,
+        signal: controller.signal,
+      })
+        .then((res) => {
+          clearTimeout(timeoutId);
+          return res;
+        })
+        .catch((err) => {
+          clearTimeout(timeoutId);
+          throw err;
+        });
+    },
+  },
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
 
 const TABLE_NAME = 'storage_items';
 

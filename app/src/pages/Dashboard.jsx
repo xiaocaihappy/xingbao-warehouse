@@ -11,6 +11,7 @@ export default function Dashboard({ user, onLogout }) {
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
+    // 关闭监听已提升至 App 层（App.jsx），此处不再重复注册
     loadStats();
     let sub = null;
     try {
@@ -18,7 +19,10 @@ export default function Dashboard({ user, onLogout }) {
     } catch (e) {
       console.error('实时订阅初始化失败:', e);
     }
-    return () => { sub?.unsubscribe?.(); };
+
+    return () => {
+      sub?.unsubscribe?.();
+    };
   }, []);
 
   async function loadStats() {
@@ -100,10 +104,6 @@ export default function Dashboard({ user, onLogout }) {
           <h1>{showSettings ? '设置' : navItems.find((n) => n.id === currentPage)?.label || '首页'}</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <UpdateNotifier api={window.electronAPI} />
-            <div className="status-badge">
-              <span className="status-dot" />
-              系统运行正常
-            </div>
           </div>
         </div>
 
@@ -120,6 +120,7 @@ export default function Dashboard({ user, onLogout }) {
           {!showSettings && currentPage === 'storage' && <Storage onStatsChange={loadStats} onBackHome={() => setCurrentPage('home')} />}
         </div>
       </div>
+
     </div>
   );
 }

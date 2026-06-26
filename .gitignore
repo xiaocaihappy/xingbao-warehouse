@@ -1,14 +1,21 @@
 # 依赖
 node_modules/
+app/node_modules/
 
 # 构建产物
 dist/
 dist-electron/
+app/dist/
+app/dist-electron*/
+app/dist-electron-v*/
 
 # 环境变量
 .env
 .env.local
 .env.production
+app/.env
+app/.env.local
+app/.env.production
 
 # 日志
 *.log
@@ -40,6 +47,10 @@ coverage/
 
 # 密钥（不上传仓库）
 token.txt
+app/token.txt
 
 # 临时文件
 *.tmp
+
+# 本地记忆与计划
+.codebuddy/
