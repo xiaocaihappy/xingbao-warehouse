@@ -36,7 +36,7 @@
     "appId": "com.xingbao.warehouse",
     "productName": "星堡移印仓储系统",
     "directories": {
-      "output": "dist-electron-v1.1.8"
+      "output": "dist-electron-v1.1.9"
     },
     "files": [
       "main.js",
