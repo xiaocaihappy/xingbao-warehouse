@@ -7,9 +7,24 @@ echo   星堡移印仓储系统 发布脚本
 echo ========================================
 echo.
 
-cd /d "%~dp0app"
+:: ===== 路径规范化（修复双反斜杠闪退）=====
+:: 先 cd 到 BAT 所在目录（"..%~dp0." 是规范化写法，去掉末尾反斜杠），再 cd app
+cd /d "%~dp0."
+if %errorlevel% neq 0 (
+    echo [错误] 无法进入脚本所在目录
+    pause
+    exit /b 1
+)
+cd app
+if %errorlevel% neq 0 (
+    echo [错误] 无法进入 app 目录
+    pause
+    exit /b 1
+)
+echo [OK] 当前目录: %cd%
+echo.
 
-::: ===== 读取 Token =====
+:: ===== 预检：token.txt =====
 if not exist "..\token.txt" (
     echo [错误] 未找到 token.txt
     echo 请在项目根目录创建 token.txt，写入你的 GitHub Token
@@ -17,61 +32,105 @@ if not exist "..\token.txt" (
     exit /b 1
 )
 for /f "usebackq delims=" %%i in ("..\token.txt") do set "GH_TOKEN=%%i"
-
-::: ===== 读取当前版本号 =====
-for /f "tokens=2 delims=:," %%a in ('findstr """version""" package.json') do (
-    set OLD_VERSION=%%~a
+if "%GH_TOKEN%"=="" (
+    echo [错误] token.txt 内容为空
+    pause
+    exit /b 1
 )
-set OLD_VERSION=%OLD_VERSION: =%
-echo 当前版本: v%OLD_VERSION%
-
-::: ===== 自动递增 patch 版本号 =====
+echo [OK] GitHub Token 已读取
 echo.
-echo [0/5] 递增版本号...
-call npm run version:patch --silent 2>nul
+
+:: ===== 预检：git user.name / user.email =====
+for /f "delims=" %%n in ('git config --get user.name 2^>nul') do set "GIT_NAME=%%n"
+for /f "delims=" %%m in ('git config --get user.email 2^>nul') do set "GIT_EMAIL=%%m"
+if "%GIT_NAME%"=="" goto :git_config_missing
+if "%GIT_EMAIL%"=="" goto :git_config_missing
+echo [OK] git 用户配置: %GIT_NAME% ^<%GIT_EMAIL%^>
+echo.
+goto :git_config_ok
+
+:git_config_missing
+echo [错误] git 用户配置缺失
+echo 请先执行：
+echo   git config --global user.name "你的名字"
+echo   git config --global user.email "你的邮箱"
+pause
+exit /b 1
+
+:git_config_ok
+
+:: ===== 读取当前版本号（精确匹配 "version": 字段）=====
+:: 精确匹配 "version": 这种字段格式，避开 "version:patch" 脚本行
+for /f "tokens=2 delims=:," %%a in ('findstr /R /C:"\"version\":" package.json') do (
+    set "OLD_VERSION=%%~a"
+)
+set "OLD_VERSION=%OLD_VERSION: =%"
+if "%OLD_VERSION%"=="" (
+    echo [错误] 无法从 package.json 读取版本号
+    pause
+    exit /b 1
+)
+echo 当前版本: v%OLD_VERSION%
+echo.
+
+:: ===== 自动递增 patch 版本号 =====
+echo [1/6] 递增版本号...
+call npm run version:patch
 if %errorlevel% neq 0 (
     echo [错误] 版本号递增失败
     pause
     exit /b 1
 )
-for /f "tokens=2 delims=:," %%a in ('findstr """version""" package.json') do (
-    set APP_VERSION=%%~a
-)
-set APP_VERSION=%APP_VERSION: =%
-echo [OK] 版本号已更新: v%OLD_VERSION% -^> v%APP_VERSION%
 
-::: ===== 提交版本号变更并推送 main 分支 =====
+:: 重新读取新版本号
+for /f "tokens=2 delims=:," %%a in ('findstr /R /C:"\"version\":" package.json') do (
+    set "APP_VERSION=%%~a"
+)
+set "APP_VERSION=%APP_VERSION: =%"
+echo [OK] 版本号已更新: v%OLD_VERSION% -^> v%APP_VERSION%
 echo.
-echo [1/5] 提交并推送代码到 GitHub main 分支...
+
+:: ===== 提交版本号变更并推送 main 分支 =====
+echo [2/6] 提交并推送代码到 GitHub main 分支...
 pushd ..
 set GIT_TERMINAL_PROMPT=0
 git add app/package.json
-git commit -m "release: v%APP_VERSION%" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [警告] 无代码变更或 commit 失败，继续...
+git commit -m "release: v%APP_VERSION%"
+set COMMIT_ERR=%errorlevel%
+if %COMMIT_ERR% neq 0 (
+    echo [警告] 无代码变更或 commit 失败（错误码: %COMMIT_ERR%），继续...
 ) else (
     echo [OK] 已提交版本号变更
 )
-git push https://%GH_TOKEN%@github.com/xiaocaihappy/xingbao-warehouse.git main >"%TEMP%\git_push_main.log" 2>&1
+
+git push https://%GH_TOKEN%@github.com/xiaocaihappy/xingbao-warehouse.git main >"%TEMP%\xingbao_push_main.log" 2>&1
 set PUSH_MAIN_ERR=%errorlevel%
 if %PUSH_MAIN_ERR% neq 0 (
-    echo [警告] main 分支推送失败（错误码: %PUSH_MAIN_ERR%）
-    type "%TEMP%\git_push_main.log"
-) else (
-    echo [OK] main 分支已推送
+    echo [错误] main 分支推送失败（错误码: %PUSH_MAIN_ERR%）
+    echo --- 推送日志 ---
+    type "%TEMP%\xingbao_push_main.log"
+    echo --- 推送日志结束 ---
+    del "%TEMP%\xingbao_push_main.log" 2>nul
+    popd
+    pause
+    exit /b 1
 )
-del "%TEMP%\git_push_main.log" 2>nul
+echo [OK] main 分支已推送
+del "%TEMP%\xingbao_push_main.log" 2>nul
 popd
-
-::: ===== 清理旧打包文件 =====
 echo.
-echo [2/5] 清理旧打包文件...
+
+:: ===== 清理旧打包文件（带充分等待避免文件占用）=====
+echo [3/6] 清理旧打包文件...
+echo 关闭可能运行的应用...
 taskkill /F /IM "星堡移印仓储系统.exe" >nul 2>&1
 taskkill /F /IM "electron.exe" >nul 2>&1
-timeout /t 2 /nobreak >nul
+echo 等待 5 秒让文件释放...
+timeout /t 5 /nobreak >nul
 if exist "dist-electron" (
     rmdir /s /q "dist-electron" 2>nul
     if exist "dist-electron" (
+        echo [警告] dist-electron 占用中，尝试强制删除...
         takeown /f "dist-electron" /r /d y >nul 2>&1
         icacls "dist-electron" /grant %username%:F /t >nul 2>&1
         rmdir /s /q "dist-electron" 2>nul
@@ -82,10 +141,10 @@ if exist "release-build" (
 )
 for /d %%d in (dist-electron-v*) do rmdir /s /q "%%d" 2>nul
 echo [OK] 清理完成
-
-::: ===== 构建前端 =====
 echo.
-echo [3/5] 构建前端...
+
+:: ===== 构建前端 =====
+echo [4/6] 构建前端...
 call npx vite build
 if %errorlevel% neq 0 (
     echo [错误] 前端构建失败
@@ -93,26 +152,37 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 echo [OK] 前端构建完成
-
-::: ===== 推送 Git Tag（HTTPS + Token，避免 SSH 卡住）=====
 echo.
-echo [4/5] 推送 Git Tag...
+
+:: ===== 推送 Git Tag（HTTPS + Token，避免 SSH 卡住）=====
+echo [5/6] 推送 Git Tag...
 pushd ..
-git tag -f v%APP_VERSION% >nul 2>&1
-echo 推送 v%APP_VERSION% 到 GitHub...
-git push https://%GH_TOKEN%@github.com/xiaocaihappy/xingbao-warehouse.git v%APP_VERSION% --force >"%TEMP%\git_push_tag.log" 2>&1
+git tag -f v%APP_VERSION%
+set TAG_ERR=%errorlevel%
+if %TAG_ERR% neq 0 (
+    echo [警告] 创建 tag 失败（错误码: %TAG_ERR%），继续...
+) else (
+    echo [OK] tag v%APP_VERSION% 已创建
+)
+git push https://%GH_TOKEN%@github.com/xiaocaihappy/xingbao-warehouse.git v%APP_VERSION% --force >"%TEMP%\xingbao_push_tag.log" 2>&1
 set PUSH_TAG_ERR=%errorlevel%
 if %PUSH_TAG_ERR% neq 0 (
-    echo [警告] Git Tag 推送失败（错误码: %PUSH_TAG_ERR%）
-    type "%TEMP%\git_push_tag.log"
-) else (
-    echo [OK] Git Tag v%APP_VERSION% 已推送
+    echo [错误] Git Tag 推送失败（错误码: %PUSH_TAG_ERR%）
+    echo --- 推送日志 ---
+    type "%TEMP%\xingbao_push_tag.log"
+    echo --- 推送日志结束 ---
+    del "%TEMP%\xingbao_push_tag.log" 2>nul
+    popd
+    pause
+    exit /b 1
 )
-del "%TEMP%\git_push_tag.log" 2>nul
+echo [OK] Git Tag v%APP_VERSION% 已推送
+del "%TEMP%\xingbao_push_tag.log" 2>nul
 popd
+echo.
 
-::: ===== 清理 GitHub 上所有草稿 Release + 同版本号 Release =====
-echo 检查并清理旧 Release（含草稿）...
+:: ===== 清理 GitHub 上所有草稿 Release + 同版本号 Release =====
+echo 清理 GitHub 上的草稿/重复 Release...
 (
 echo $token=$env:GH_TOKEN_BAT
 echo $tag='v'+$env:APP_VER_BAT
@@ -145,20 +215,31 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMP%\xingbao_cleanup.ps1"
 del "%TEMP%\xingbao_cleanup.ps1" 2>nul
 echo.
 
-::: ===== 打包并发布 =====
-echo [5/5] 打包并发布到 GitHub Releases（正式版）...
+:: ===== 打包并发布（用 cmd /c 包裹避免 npx 弹窗 + 完整日志）=====
+echo [6/6] 打包并发布到 GitHub Releases（正式版）...
 set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-call npx electron-builder --win --publish always
-if %errorlevel% neq 0 (
-    echo [错误] 发布失败（错误码: %errorlevel%）
+echo 开始 electron-builder 打包，预计 1-3 分钟，请耐心等待...
+echo 日志输出: %TEMP%\xingbao_build.log
+
+cmd /c "npx electron-builder --win --publish always" >"%TEMP%\xingbao_build.log" 2>&1
+set BUILD_ERR=%errorlevel%
+if %BUILD_ERR% neq 0 (
+    echo [错误] 发布失败（错误码: %BUILD_ERR%）
+    echo --- 打包日志（最后 50 行）---
+    powershell -NoProfile -Command "Get-Content '%TEMP%\xingbao_build.log' -Tail 50"
+    echo --- 日志结束 ---
     echo.
     echo 常见原因：
     echo   1. app.asar 被占用 - 关闭应用后重试
     echo   2. 网络超时 - 检查 GitHub 连接
     echo   3. Token 失效或权限不足 - 检查 token.txt
+    echo   4. 完整日志: %TEMP%\xingbao_build.log
+    del "%TEMP%\xingbao_build.log" 2>nul
     pause
     exit /b 1
 )
+echo [OK] 打包发布成功
+del "%TEMP%\xingbao_build.log" 2>nul
 
 echo.
 echo ========================================
