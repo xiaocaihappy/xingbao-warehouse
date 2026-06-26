@@ -31,9 +31,18 @@ if not exist "..\token.txt" (
     pause
     exit /b 1
 )
-for /f "usebackq delims=" %%i in ("..\token.txt") do set "GH_TOKEN=%%i"
-if "%GH_TOKEN%"=="" (
-    echo [错误] token.txt 内容为空
+for /f "usebackq delims=" %%i in (`node "..\scripts\read-token.js"`) do set "GH_TOKEN=%%i"
+if not defined GH_TOKEN (
+    echo [错误] token.txt 中未找到有效的 GitHub Token
+    echo 请删除 # placeholder 这一行，写入你的真实 GitHub Token
+    pause
+    exit /b 1
+)
+echo "%GH_TOKEN%" | findstr /I "placeholder" >nul 2>&1
+if %errorlevel%==0 (
+    echo [错误] token.txt 还是占位符 "# placeholder"
+    echo 请打开 token.txt，把它替换为你的 GitHub Personal Access Token
+    echo 获取方式：https://github.com/settings/tokens
     pause
     exit /b 1
 )
@@ -107,9 +116,9 @@ git push https://%GH_TOKEN%@github.com/xiaocaihappy/xingbao-warehouse.git main >
 set PUSH_MAIN_ERR=%errorlevel%
 if %PUSH_MAIN_ERR% neq 0 (
     echo [错误] main 分支推送失败（错误码: %PUSH_MAIN_ERR%）
-    echo --- 推送日志 ---
+    echo [推送日志]
     type "%TEMP%\xingbao_push_main.log"
-    echo --- 推送日志结束 ---
+    echo [推送日志结束]
     del "%TEMP%\xingbao_push_main.log" 2>nul
     popd
     pause
@@ -168,9 +177,9 @@ git push https://%GH_TOKEN%@github.com/xiaocaihappy/xingbao-warehouse.git v%APP_
 set PUSH_TAG_ERR=%errorlevel%
 if %PUSH_TAG_ERR% neq 0 (
     echo [错误] Git Tag 推送失败（错误码: %PUSH_TAG_ERR%）
-    echo --- 推送日志 ---
+    echo [推送日志]
     type "%TEMP%\xingbao_push_tag.log"
-    echo --- 推送日志结束 ---
+    echo [推送日志结束]
     del "%TEMP%\xingbao_push_tag.log" 2>nul
     popd
     pause
@@ -225,9 +234,9 @@ cmd /c "npx electron-builder --win --publish always" >"%TEMP%\xingbao_build.log"
 set BUILD_ERR=%errorlevel%
 if %BUILD_ERR% neq 0 (
     echo [错误] 发布失败（错误码: %BUILD_ERR%）
-    echo --- 打包日志（最后 50 行）---
+    echo [打包日志 最后 50 行]
     powershell -NoProfile -Command "Get-Content '%TEMP%\xingbao_build.log' -Tail 50"
-    echo --- 日志结束 ---
+    echo [日志结束]
     echo.
     echo 常见原因：
     echo   1. app.asar 被占用 - 关闭应用后重试
