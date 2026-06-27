@@ -1,7 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kxtsomnzksxqkuhieqxg.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   realtime: {
@@ -41,7 +41,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 const TABLE_NAME = 'storage_items';
 
-// 认证相关
+// 璁よ瘉鐩稿叧
 export async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   return { data, error };
@@ -77,8 +77,7 @@ export function onAuthStateChange(callback) {
   });
 }
 
-// 数据操作 - 对接 storage_items 表
-export async function fetchItems(filters = {}) {
+// 鏁版嵁鎿嶄綔 - 瀵规帴 storage_items 琛?export async function fetchItems(filters = {}) {
   let query = supabase.from(TABLE_NAME).select('*');
 
   if (filters.search) {
@@ -128,7 +127,7 @@ export async function uploadImage(file) {
       upsert: false,
     });
   if (error) {
-    console.error('图片上传失败:', error);
+    console.error('鍥剧墖涓婁紶澶辫触:', error);
     return { data: null, error };
   }
 
@@ -147,7 +146,7 @@ export async function deleteImage(url) {
   return { error };
 }
 
-// 实时订阅
+// 瀹炴椂璁㈤槄
 export function subscribeToItems(callback) {
   return supabase
     .channel('storage-items-changes')

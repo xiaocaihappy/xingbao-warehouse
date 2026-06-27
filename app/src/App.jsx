@@ -1,5 +1,67 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense, Component } from 'react';
 import { getCurrentUser, getSession, onAuthStateChange, signOut } from './supabase';
+
+// ===== React Error Boundary —— 防止渲染层崩溃导致白屏 =====
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ errorInfo });
+    // 写入渲染进程崩溃日志
+    try {
+      const log = {
+        time: new Date().toISOString(),
+        message: error?.message || String(error),
+        stack: error?.stack || '',
+        componentStack: errorInfo?.componentStack || '',
+      };
+      if (window.electronAPI?.isElectron) {
+        localStorage.setItem('xingbao_crash_log', JSON.stringify(log));
+      }
+      console.error('[ErrorBoundary] React render error:', log);
+    } catch {}
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="login-container">
+          <div style={{ textAlign: 'center', maxWidth: 480, padding: 32 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+            <h2 style={{ color: 'var(--text)', marginBottom: 8 }}>应用发生错误</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>
+              {this.state.error?.message || '未知错误'}
+            </p>
+            <details style={{ textAlign: 'left', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 20, background: 'var(--bg-card)', padding: 12, borderRadius: 8, maxHeight: 200, overflow: 'auto' }}>
+              <summary style={{ cursor: 'pointer', marginBottom: 8 }}>错误详情（点击展开）</summary>
+              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>
+                {this.state.error?.stack || ''}
+                {this.state.errorInfo?.componentStack || ''}
+              </pre>
+            </details>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                this.setState({ error: null, errorInfo: null });
+                window.location.reload();
+              }}
+            >
+              重新加载应用
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -152,18 +214,19 @@ export default function App() {
   }
 
   return (
-    <Suspense fallback={<AppLoader />}>
-      {user ? (
-        <Dashboard user={user} onLogout={async () => {
-          await signOut();
-          setUser(null);
-        }} />
-      ) : (
-        <Login onLogin={setUser} />
-      )}
+    <ErrorBoundary>
+      <Suspense fallback={<AppLoader />}>
+        {user ? (
+          <Dashboard user={user} onLogout={async () => {
+            await signOut();
+            setUser(null);
+          }} />
+        ) : (
+          <Login onLogin={setUser} />
+        )}
 
-      {/* 全局关闭窗口询问弹窗 — 断网时仍能立即响应 */}
-      {showCloseDialog && (
+        {/* 全局关闭窗口询问弹窗 — 断网时仍能立即响应 */}
+        {showCloseDialog && (
         <div className="modal-overlay">
           <div className="modal" style={{ maxWidth: 380, textAlign: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🔔</div>
@@ -212,6 +275,7 @@ export default function App() {
           </div>
         </div>
       )}
-    </Suspense>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
