@@ -51,4 +51,6 @@ token.txt
 # 旧版本发布包
 xingbao-warehouse-*.zip
 xingbao-warehouse-*/
-app/update-test/
+app/update-test/node_modules/
+release-build/
+废弃/
