@@ -477,8 +477,9 @@ app.whenReady().then(() => {
       // 在线更新诊断
       ipcMain.handle('update:diagnose', async () => {
         try {
-          const results = await updater.runDiagnostic();
-          return { success: true, results };
+          const diag = await updater.runDiagnostic();
+          // 统一返回格式供前端使用
+          return { success: true, results: diag.checks, summary: diag.summary, suggestion: diag.suggestion };
         } catch (e) {
           return { success: false, error: e.message };
         }

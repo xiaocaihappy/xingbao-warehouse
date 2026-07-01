@@ -235,9 +235,9 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
     onSwitchAccount?.();
   }
 
-  function showToast(msg, type) {
+  function showToast(msg, type, duration = 3000) {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), duration);
   }
 
   return (
@@ -322,11 +322,12 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
                 try {
                   const result = await window.electronAPI.runDiagnose();
                   if (result.success) {
-                    const errors = result.results?.filter(r => r.status === 'error') || [];
+                    const errors = result.results?.filter(r => r.status === 'fail') || [];
                     if (errors.length > 0) {
-                      showToast(`诊断完成: ${errors.length} 项异常`, 'error');
+                      const details = errors.map(e => `${e.name}: ${e.detail}`).join('\n');
+                      showToast(`发现 ${errors.length} 项异常: ${details}`, 'error', 8000);
                     } else {
-                      showToast('诊断完成: 所有环节正常', 'success');
+                      showToast(`${result.summary || '所有环节正常'}`, 'success');
                     }
                     console.table(result.results);
                   } else {
