@@ -28,12 +28,12 @@ function getDefaultStaff() {
   return DEFAULT_STAFF_BASE;
 }
 
-// 普通文本输入字段
+// 普通文本输入字段（单列布局）
 const TEXT_FIELDS = [
-  { key: 'shelf_number', label: '货架号（第几列）', placeholder: '请输入货架列号', required: true, accent: 'amber' },
-  { key: 'grid_number', label: '格子', placeholder: '请输入格子编号', accent: 'teal' },
-  { key: 'product_code', label: '货号', placeholder: '请输入产品货号', accent: 'blue' },
-  { key: 'stamp_code', label: '移印编号', placeholder: '请输入移印编号', required: true, accent: 'rose' },
+  { key: 'shelf_number', label: '货架号（第几列）', placeholder: '请输入货架号', required: true, accent: 'cyan' },
+  { key: 'grid_number', label: '格子', placeholder: '请输入格子编号', accent: 'cyan' },
+  { key: 'product_code', label: '货号', placeholder: '请输入货号', accent: 'purple' },
+  { key: 'stamp_code', label: '移印编号', placeholder: '请输入移印编号', required: true, accent: 'cyan' },
 ];
 
 export default function Storage({ onStatsChange, onBackHome }) {
@@ -187,89 +187,73 @@ export default function Storage({ onStatsChange, onBackHome }) {
     setTimeout(() => setToast(null), 3500);
   }
 
-  const staggerDelay = (i) => ({ animationDelay: `${0.08 + i * 0.06}s` });
-
   return (
     <div className={`stg-page ${mounted ? 'stg-mounted' : ''}`}>
       {toast && <div className={`stg-toast stg-toast--${toast.type}`}>{toast.msg}</div>}
 
-      {/* ===== Header ===== */}
-      <header className="stg-header">
-        <div className="stg-header-top">
-          <button className="stg-btn-back" onClick={handleReset} title="返回首页">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
-            <span>返回</span>
-          </button>
-          <div className="stg-header-brand">
-            <div className="stg-header-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-            </div>
-            <div className="stg-header-text">
-              <h1 className="stg-title">移印签板样品工单</h1>
-              <p className="stg-subtitle">录入新的样品信息至仓储系统</p>
-            </div>
-          </div>
-          <input ref={excelRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelImport} style={{ display: 'none' }} />
-          <button className="stg-btn-import" onClick={() => excelRef.current?.click()} disabled={importing}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>{importing ? '导入中...' : '导入 Excel'}</span>
-          </button>
-        </div>
-        <div className="stg-header-wave">
-          <svg preserveAspectRatio="none" viewBox="0 0 1440 48" width="1440" height="48"><path d="M0 48h1440V24c-240-32-480-32-720 0S480 56 240 48 80 40 0 48z" fill="currentColor" opacity="0.06"/></svg>
-        </div>
-      </header>
+      {/* ===== Top Bar ===== */}
+      <div className="stg-topbar">
+        <button className="stg-btn-back" onClick={handleReset} title="返回首页">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+          <span>返回首页</span>
+        </button>
+        <input ref={excelRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelImport} style={{ display: 'none' }} />
+        <button className="stg-btn-import" onClick={() => excelRef.current?.click()} disabled={importing}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          <span>{importing ? '导入中...' : '导入 Excel'}</span>
+        </button>
+      </div>
 
-      {/* ===== Form ===== */}
-      <div className="stg-form">
-
-        {/* Section 1: 样品信息 */}
-        <section className="stg-section" style={staggerDelay(0)}>
-          <div className="stg-section-head">
-            <div className="stg-section-dot" />
-            <h2 className="stg-section-title">样品信息</h2>
-            <div className="stg-section-line" />
+      {/* ===== Main Card ===== */}
+      <div className="stg-card">
+        {/* Header */}
+        <div className="stg-card-head">
+          <div className="stg-dots">
+            <span className="stg-dot stg-dot--cyan" />
+            <span className="stg-dot stg-dot--cyan" />
+            <span className="stg-dot stg-dot--purple" />
           </div>
-          <div className="stg-section-grid">
-            {TEXT_FIELDS.map((field, i) => (
-              <div key={field.key} className={`stg-field stg-field--${field.accent}`} style={staggerDelay(i + 1)}>
-                <label className="stg-field-label">
-                  {field.label}
-                  {field.required && <span className="stg-field-required">*</span>}
-                </label>
-                <div className="stg-field-wrap">
-                  <input
-                    type="text"
-                    className="stg-field-input"
-                    value={form[field.key]}
-                    onChange={e => updateField(field.key, e.target.value)}
-                    placeholder={field.placeholder}
-                  />
-                  <div className="stg-field-bar" />
-                </div>
+          <h1 className="stg-title">移印签板样品工单</h1>
+          <p className="stg-subtitle">请填写完整的样品信息</p>
+        </div>
+
+        {/* Form */}
+        <div className="stg-form">
+          {/* 文本字段（单列） */}
+          {TEXT_FIELDS.map((field, i) => (
+            <div key={field.key} className={`stg-field stg-field--${field.accent} stg-stagger`} style={{ animationDelay: `${0.08 + i * 0.05}s` }}>
+              <label className="stg-field-label">
+                {field.label}
+                {field.required && <span className="stg-field-required">*</span>}
+              </label>
+              <div className="stg-field-input-wrap">
+                <input
+                  type="text"
+                  className="stg-field-input"
+                  value={form[field.key]}
+                  onChange={e => updateField(field.key, e.target.value)}
+                  placeholder={field.placeholder}
+                />
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
+          ))}
 
-        {/* Section 2: 渠道与人员 */}
-        <section className="stg-section" style={staggerDelay(5)}>
-          <div className="stg-section-head">
-            <div className="stg-section-dot" />
-            <h2 className="stg-section-title">渠道与人员</h2>
-            <div className="stg-section-line" />
-          </div>
-          <div className="stg-section-grid">
+          {/* 销售列（单列布局） */}
+          <div className="stg-stagger" style={{ animationDelay: `${0.08 + 4 * 0.05}s` }}>
             <SelectField
               label="销售列"
               defaultOptions={DEFAULT_SALES}
               storageKey="sales_channel"
               value={form.sales_channel}
               onChange={v => updateField('sales_channel', v)}
-              placeholder="请选择销售渠道"
+              placeholder="请选择销售"
               required
-              accent="amber"
+              accent="cyan"
             />
+          </div>
+
+          {/* 仓储人员（带"管理人员"角标） */}
+          <div className="stg-stagger stg-field-with-badge" style={{ animationDelay: `${0.08 + 5 * 0.05}s` }}>
             <SelectField
               label="仓储人员"
               defaultOptions={DEFAULT_STAFF}
@@ -278,83 +262,76 @@ export default function Storage({ onStatsChange, onBackHome }) {
               onChange={v => updateField('staff_name', v)}
               placeholder="请选择仓储人员"
               required
-              accent="rose"
+              accent="purple"
             />
+            <span className="stg-badge">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              管理人员
+            </span>
           </div>
-        </section>
 
-        {/* Section 3: 样品图片 */}
-        <section className="stg-section" style={staggerDelay(6)}>
-          <div className="stg-section-head">
-            <div className="stg-section-dot" />
-            <h2 className="stg-section-title">样品图片</h2>
-            <div className="stg-section-line" />
-          </div>
-          <input ref={fileRef} type="file" accept="image/*" onChange={handleFilePick} style={{ display: 'none' }} />
-          {form.image_url ? (
-            <div className="stg-preview">
-              <div className="stg-preview-img-wrap">
-                <img src={form.image_url} alt="样品预览" className="stg-preview-img" />
-                <div className="stg-preview-overlay">
-                  <button type="button" className="stg-preview-btn stg-preview-btn--change" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                    <span>{uploading ? '上传中...' : '更换'}</span>
-                  </button>
-                  <button type="button" className="stg-preview-btn stg-preview-btn--remove" onClick={removeImage}>
+          {/* 上传图片 */}
+          <div className={`stg-field stg-field--cyan stg-stagger`} style={{ animationDelay: `${0.08 + 6 * 0.05}s` }}>
+            <label className="stg-field-label">上传图片</label>
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleFilePick} style={{ display: 'none' }} />
+            {form.image_url ? (
+              <div className="stg-upload-row">
+                <div className="stg-upload-preview">
+                  <img src={form.image_url} alt="样品预览" className="stg-upload-img" />
+                  <button type="button" className="stg-upload-remove" onClick={removeImage} title="移除图片">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    <span>删除</span>
                   </button>
                 </div>
+                <button type="button" className="stg-upload-change" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                  {uploading ? '⏳ 上传中...' : '📷 更换图片'}
+                </button>
               </div>
-            </div>
-          ) : (
-            <div
-              className={`stg-upload ${dragOver ? 'stg-upload--drag' : ''} ${uploading ? 'stg-upload--loading' : ''}`}
-              onClick={() => !uploading && fileRef.current?.click()}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              role="button"
-              tabIndex={0}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }}
-            >
-              <div className="stg-upload-icon">
-                {uploading ? (
-                  <div className="stg-upload-spinner" />
-                ) : (
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                )}
-                {dragOver && <div className="stg-upload-glow" />}
-              </div>
-              <div className="stg-upload-text">
-                <strong>{uploading ? '正在上传...' : '点击选择或拖拽图片到此'}</strong>
-                <small>支持 JPG / PNG，单个文件不超过 10MB</small>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* ===== Footer Actions ===== */}
-        <div className="stg-actions" style={staggerDelay(7)}>
-          <button className="stg-btn stg-btn--save" onClick={handleSave} disabled={loading}>
-            {loading ? (
-              <><div className="stg-btn-spinner" /><span>保存中...</span></>
             ) : (
-              <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>保存数据</span></>
+              <button
+                type="button"
+                className={`stg-upload-btn ${dragOver ? 'stg-upload-btn--drag' : ''} ${uploading ? 'stg-upload-btn--loading' : ''}`}
+                onClick={() => !uploading && fileRef.current?.click()}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <><span className="stg-upload-spinner" />正在上传...</>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <span>选择图片文件</span>
+                  </>
+                )}
+              </button>
             )}
-          </button>
-          <button className="stg-btn stg-btn--reset" onClick={handleReset} disabled={loading}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            <span>重置工单</span>
-          </button>
+          </div>
+
+          {/* 底部按钮 */}
+          <div className="stg-actions">
+            <button className="stg-btn stg-btn--save" onClick={handleSave} disabled={loading}>
+              {loading ? (
+                <><span className="stg-btn-spinner" />保存中...</>
+              ) : (
+                <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>保存数据</span></>
+              )}
+            </button>
+            <button className="stg-btn stg-btn--reset" onClick={handleReset} disabled={loading}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <span>重置工单</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* ===== Background Decor ===== */}
+      {/* Background decor */}
       <div className="stg-bg-decor" aria-hidden="true">
         <div className="stg-bg-grid" />
-        <div className="stg-bg-orb stg-bg-orb--1" />
-        <div className="stg-bg-orb stg-bg-orb--2" />
       </div>
     </div>
   );
