@@ -281,14 +281,14 @@ export default function Query({ onStatsChange }) {
                     <th style={{ width: 40 }}>
                       <input type="checkbox" checked={selectAll} onChange={toggleSelectAll} className="table-checkbox" />
                     </th>
-                    <th style={{ width: 60 }}>图片</th>
-                    <th>移印编号</th>
                     <th>货架号</th>
+                    <th>移印编号</th>
                     <th>销售</th>
+                    <th style={{ width: 80 }}>图片</th>
                     <th>人员</th>
+                    <th>创建时间</th>
                     <th>格子号</th>
                     <th>产品货号</th>
-                    <th>创建时间</th>
                     <th style={{ width: 130 }}>操作</th>
                   </tr>
                 </thead>
@@ -303,30 +303,30 @@ export default function Query({ onStatsChange }) {
                           className="table-checkbox"
                         />
                       </td>
+                      <td><strong>{item.shelf_number}</strong></td>
+                      <td className="cell-code">{item.stamp_code}</td>
+                      <td>
+                        <span className={`channel-tag channel-${getChannelColor(item.sales_channel)}`}>
+                          {item.sales_channel || '-'}
+                        </span>
+                      </td>
                       <td>
                         {item.image_url && item.image_url !== 'EMPTY' ? (
                           <img
                             src={item.image_url}
                             alt=""
                             className="sample-image"
-                            onClick={() => setExpandedImage(expandedImage === item.id ? null : item.id)}
+                            onClick={() => setExpandedImage(item)}
                             onError={e => { e.currentTarget.style.display = 'none'; }}
                           />
                         ) : (
                           <div className="no-image">📷</div>
                         )}
                       </td>
-                      <td className="cell-code">{item.stamp_code}</td>
-                      <td><strong>{item.shelf_number}</strong></td>
-                      <td>
-                        <span className={`channel-tag channel-${getChannelColor(item.sales_channel)}`}>
-                          {item.sales_channel || '-'}
-                        </span>
-                      </td>
                       <td>{item.staff_name || '-'}</td>
+                      <td className="cell-time">{item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : '-'}</td>
                       <td>{item.grid_number || '-'}</td>
                       <td className="cell-mono">{item.product_code || '-'}</td>
-                      <td className="cell-time">{item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : '-'}</td>
                       <td>
                         <button className="btn btn-outline btn-xs" onClick={() => setEditModal(item)}>编辑</button>
                         <button className="btn btn-ghost-danger btn-xs" onClick={() => handleDelete(item.id)}>删除</button>
@@ -412,6 +412,32 @@ export default function Query({ onStatsChange }) {
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setEditModal(null)}>取消</button>
               <button className="btn btn-primary-glow" onClick={handleEdit}>保存修改</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 图片放大预览弹窗 */}
+      {expandedImage && (
+        <div className="image-lightbox" onClick={() => setExpandedImage(null)}>
+          <button className="image-lightbox-close" onClick={() => setExpandedImage(null)} aria-label="关闭预览">×</button>
+          <div className="image-lightbox-content" onClick={e => e.stopPropagation()}>
+            <img
+              src={expandedImage.image_url}
+              alt={expandedImage.stamp_code || '样品图片'}
+              className="image-lightbox-img"
+              onError={e => { e.currentTarget.alt = '图片加载失败'; }}
+            />
+            <div className="image-lightbox-info">
+              <span className="image-lightbox-code">{expandedImage.stamp_code || '-'}</span>
+              <span className="image-lightbox-sep">/</span>
+              <span className="image-lightbox-shelf">{expandedImage.shelf_number || '-'}</span>
+              {expandedImage.product_code && (
+                <>
+                  <span className="image-lightbox-sep">·</span>
+                  <span className="image-lightbox-product">{expandedImage.product_code}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
