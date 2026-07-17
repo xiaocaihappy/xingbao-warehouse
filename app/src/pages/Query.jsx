@@ -282,13 +282,13 @@ export default function Query({ onStatsChange }) {
                       <input type="checkbox" checked={selectAll} onChange={toggleSelectAll} className="table-checkbox" />
                     </th>
                     <th>货架号</th>
-                    <th>移印编号</th>
-                    <th>销售</th>
-                    <th style={{ width: 80 }}>图片</th>
-                    <th>人员</th>
-                    <th>创建时间</th>
                     <th>格子号</th>
                     <th>产品货号</th>
+                    <th>移印编号</th>
+                    <th style={{ width: 80 }}>图片</th>
+                    <th>销售</th>
+                    <th>人员</th>
+                    <th>创建时间</th>
                     <th style={{ width: 130 }}>操作</th>
                   </tr>
                 </thead>
@@ -304,12 +304,9 @@ export default function Query({ onStatsChange }) {
                         />
                       </td>
                       <td><strong>{item.shelf_number}</strong></td>
+                      <td>{item.grid_number || '-'}</td>
+                      <td className="cell-mono">{item.product_code || '-'}</td>
                       <td className="cell-code">{item.stamp_code}</td>
-                      <td>
-                        <span className={`channel-tag channel-${getChannelColor(item.sales_channel)}`}>
-                          {item.sales_channel || '-'}
-                        </span>
-                      </td>
                       <td>
                         {item.image_url && item.image_url !== 'EMPTY' ? (
                           <img
@@ -323,10 +320,13 @@ export default function Query({ onStatsChange }) {
                           <div className="no-image">📷</div>
                         )}
                       </td>
+                      <td>
+                        <span className={`channel-tag channel-${getChannelColor(item.sales_channel)}`}>
+                          {item.sales_channel || '-'}
+                        </span>
+                      </td>
                       <td>{item.staff_name || '-'}</td>
                       <td className="cell-time">{item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : '-'}</td>
-                      <td>{item.grid_number || '-'}</td>
-                      <td className="cell-mono">{item.product_code || '-'}</td>
                       <td>
                         <button className="btn btn-outline btn-xs" onClick={() => setEditModal(item)}>编辑</button>
                         <button className="btn btn-ghost-danger btn-xs" onClick={() => handleDelete(item.id)}>删除</button>
