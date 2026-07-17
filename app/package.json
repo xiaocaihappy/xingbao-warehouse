@@ -1,10 +1,10 @@
 {
   "name": "xingbao-warehouse",
-  "version": "1.1.17",
-  "description": "\u661f\u582e\u79fb\u5370\u6837\u54c1\u4ed3\u50a8\u7cfb\u7edf",
+  "version": "1.1.18",
+  "description": "星堮移印样品仓储系统",
   "main": "main.js",
   "author": {
-    "name": "\u661f\u582e\u79d1\u6280"
+    "name": "星堮科技"
   },
   "scripts": {
     "dev": "concurrently \"cross-env BROWSER=none vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
@@ -77,8 +77,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "\u661f\u582e\u79fb\u5370\u4ed3\u50a8\u7cfb\u7edf",
-      "uninstallDisplayName": "\u661f\u582e\u79fb\u5370\u4ed3\u50a8\u7cfb\u7edf",
+      "shortcutName": "星堮移印仓储系统",
+      "uninstallDisplayName": "星堮移印仓储系统",
       "deleteAppDataOnUninstall": false,
       "displayLanguageSelector": false,
       "allowElevation": true,
