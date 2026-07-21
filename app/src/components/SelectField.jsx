@@ -1,20 +1,23 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
- * 可增删选项的下拉选择组件
+ * 可增删选项的下拉选择组件（使用 Portal 渲染下拉，逃出所有堆叠上下文）
  * @param {string} label - 字段标签
  * @param {string[]} defaultOptions - 默认选项（不可删除）
- * @param {string} storageKey - localStorage 存储 key
+ * @param {string[]} options - 受控的完整选项列表
+ * @param {function} onOptionsChange - 选项变化回调
  * @param {string} value - 当前选中值
  * @param {function} onChange - 值变化回调
  * @param {string} placeholder - 占位文字
  * @param {boolean} required - 是否必填
- * @param {string} accent - 左边框颜色标识 (blue/cyan/purple/green)
+ * @param {string} accent - 左边框颜色标识
  */
 export default function SelectField({
   label,
   defaultOptions = [],
-  storageKey,
+  options: controlledOptions,
+  onOptionsChange,
   value,
   onChange,
   placeholder = '请选择',
@@ -22,45 +25,65 @@ export default function SelectField({
   accent = 'blue',
 }) {
   const [open, setOpen] = useState(false);
-  const [customOptions, setCustomOptions] = useState([]);
+  const [internalOptions, setInternalOptions] = useState(defaultOptions);
   const [adding, setAdding] = useState(false);
   const [newOption, setNewOption] = useState('');
-  const containerRef = useRef(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef = useRef(null);
+  const dropdownRef = useRef(null);
   const addInputRef = useRef(null);
 
-  // 从 localStorage 加载已保存的自定义选项
-  useEffect(() => {
-    if (!storageKey) return;
-    try {
-      const saved = localStorage.getItem(`select_options_${storageKey}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) setCustomOptions(parsed);
-      }
-    } catch { /* ignore */ }
-  }, [storageKey]);
+  // 支持受控或非受控模式
+  const allOptions = controlledOptions || internalOptions;
 
-  // 持久化自定义选项
-  function saveOptions(opts) {
-    setCustomOptions(opts);
-    if (storageKey) {
-      localStorage.setItem(`select_options_${storageKey}`, JSON.stringify(opts));
-    }
+  function setOptions(next) {
+    if (onOptionsChange) onOptionsChange(next);
+    if (!controlledOptions) setInternalOptions(next);
   }
 
-  // 合并所有选项
-  const allOptions = [...defaultOptions, ...customOptions];
+  // 计算下拉菜单位置（基于 trigger 的位置）
+  function updatePosition() {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + 6,
+      left: rect.left,
+      width: rect.width,
+    });
+  }
+
+  // 打开时计算位置
+  useLayoutEffect(() => {
+    if (open) {
+      updatePosition();
+    }
+  }, [open]);
+
+  // 监听滚动和窗口大小变化，更新位置
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => updatePosition();
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('resize', handler);
+    return () => {
+      window.removeEventListener('scroll', handler, true);
+      window.removeEventListener('resize', handler);
+    };
+  }, [open]);
 
   // 点击外部关闭
   useEffect(() => {
     if (!open) return;
     function handleClick(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
+      const inTrigger = triggerRef.current && triggerRef.current.contains(e.target);
+      const inDropdown = dropdownRef.current && dropdownRef.current.contains(e.target);
+      if (!inTrigger && !inDropdown) {
         setOpen(false);
         setAdding(false);
         setNewOption('');
       }
     }
+    // 使用 mousedown 比 click 更快响应
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
@@ -85,14 +108,13 @@ export default function SelectField({
       return;
     }
     if (allOptions.includes(trimmed)) {
-      // 已存在，直接选中
       onChange(trimmed);
       setOpen(false);
       setAdding(false);
       setNewOption('');
       return;
     }
-    saveOptions([...customOptions, trimmed]);
+    setOptions([...allOptions, trimmed]);
     onChange(trimmed);
     setOpen(false);
     setAdding(false);
@@ -100,7 +122,7 @@ export default function SelectField({
   }
 
   function handleDelete(opt) {
-    saveOptions(customOptions.filter(o => o !== opt));
+    setOptions(allOptions.filter(o => o !== opt));
     if (value === opt) {
       onChange('');
     }
@@ -121,7 +143,6 @@ export default function SelectField({
   return (
     <div
       className={`field-group field-accent-${accent}`}
-      ref={containerRef}
     >
       <label className="field-label">
         {label}
@@ -129,6 +150,7 @@ export default function SelectField({
       </label>
 
       <div
+        ref={triggerRef}
         className={`select-field-trigger ${open ? 'select-field-open' : ''} ${value ? 'select-field-has-value' : ''}`}
         onClick={() => { setOpen(!open); setAdding(false); }}
         tabIndex={0}
@@ -140,31 +162,43 @@ export default function SelectField({
         <span className={`select-field-arrow ${open ? 'rotated' : ''}`}>▾</span>
       </div>
 
-      {open && (
-        <div className="select-field-dropdown">
-          {allOptions.map((opt) => {
-            const isCustom = customOptions.includes(opt);
-            const isSelected = opt === value;
-            return (
-              <div
-                key={opt}
-                className={`select-field-option ${isSelected ? 'selected' : ''}`}
-                onClick={(e) => { e.stopPropagation(); handleSelect(opt); }}
-              >
-                <span className="select-field-option-text">{opt}</span>
-                {isCustom && (
-                  <button
-                    className="select-field-delete-btn"
-                    onClick={(e) => { e.stopPropagation(); handleDelete(opt); }}
-                    title={`删除「${opt}」`}
-                    type="button"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            );
-          })}
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          className="select-field-dropdown select-field-dropdown--portal"
+          style={{
+            position: 'fixed',
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="select-field-options">
+            {allOptions.map((opt) => {
+              const isCustom = !defaultOptions.includes(opt);
+              const isSelected = opt === value;
+              return (
+                <div
+                  key={opt}
+                  className={`select-field-option ${isSelected ? 'selected' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); handleSelect(opt); }}
+                >
+                  <span className="select-field-option-text">{opt}</span>
+                  {isCustom && (
+                    <button
+                      className="select-field-delete-btn"
+                      onClick={(e) => { e.stopPropagation(); handleDelete(opt); }}
+                      title={`删除「${opt}」`}
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
           {/* 新增选项区域 */}
           {adding ? (
@@ -203,7 +237,8 @@ export default function SelectField({
               + 新增选项
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

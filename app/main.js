@@ -84,10 +84,26 @@ const CLOSE_TIMEOUT_MS = 1500;
 const DOUBLE_CLICK_MS = 800;
 let lastCloseClickTime = 0;
 
+// 主题文件路径（用于 splash 窗口读取）
+const THEME_FILE = path.join(app.getPath('userData'), 'theme.json');
+
+// 读取已保存的主题
+function readSavedTheme() {
+  try {
+    if (fs.existsSync(THEME_FILE)) {
+      return JSON.parse(fs.readFileSync(THEME_FILE, 'utf-8'));
+    }
+  } catch {}
+  return { theme: 'dark', isLight: false };
+}
+
 function createSplashWindow() {
   try {
     const splashPath = path.join(__dirname, 'splash.html');
     writeStartupLog('SPLASH_CREATE', `loading ${splashPath}`);
+
+    const themeData = readSavedTheme();
+    const themeQuery = `?theme=${themeData.theme}&light=${themeData.isLight ? 1 : 0}`;
 
     splashWindow = new BrowserWindow({
       width: 460,
@@ -97,7 +113,7 @@ function createSplashWindow() {
       resizable: false,
       center: true,
       show: true,
-      backgroundColor: '#0f131a',
+      backgroundColor: themeData.isLight ? '#f5f8fb' : '#0f131a',
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -106,7 +122,7 @@ function createSplashWindow() {
       skipTaskbar: true,
     });
 
-    splashWindow.loadFile(splashPath).catch((err) => {
+    splashWindow.loadFile(splashPath, { query: { theme: themeData.theme, light: themeData.isLight ? '1' : '0' } }).catch((err) => {
       writeCrashLog('SPLASH_LOAD_FAIL', err);
       console.error('[Splash] loadFile failed:', err.message);
     });
@@ -213,11 +229,11 @@ function createWindow() {
       });
     }
 
-  // ===== 关闭处理：带超时兜底 + 双击即退，防止网络阻塞导致无法退出 =====
+  // ===== 关闭处理：弹窗让用户选择，不强制超时 =====
   mainWindow.on('close', (event) => {
     if (isQuiting) return;
 
-    // 双击关闭按钮 → 立即强制退出（断网应急）
+    // 双击关闭按钮 → 立即强制退出
     const now = Date.now();
     if (now - lastCloseClickTime < DOUBLE_CLICK_MS) {
       isQuiting = true;
@@ -228,32 +244,22 @@ function createWindow() {
 
     event.preventDefault();
 
-    // 检查渲染进程是否已崩溃/销毁
+    // 检查渲染进程是否已崩溃/销毁 → 直接退出
     if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed() || mainWindow.webContents.isCrashed()) {
       isQuiting = true;
       app.quit();
       return;
     }
 
-    // 发送关闭请求到渲染进程
+    // 发送关闭请求到渲染进程（断网时 IPC 不受影响，弹窗照常出现）
     try {
       mainWindow.webContents.send('window:close-request');
     } catch (e) {
       console.error('[Close] 发送关闭请求失败:', e.message);
       isQuiting = true;
       app.quit();
-      return;
     }
-
-    // 超时保护：1.5 秒后强制退出（断网应急兜底）
-    clearTimeout(closeTimeout);
-    closeTimeout = setTimeout(() => {
-      if (!isQuiting) {
-        console.warn('[Close] 渲染进程超时未响应，强制退出');
-        isQuiting = true;
-        app.quit();
-      }
-    }, CLOSE_TIMEOUT_MS);
+    // 等待用户选择（不再自动超时退出）
   });
 
   mainWindow.on('closed', () => {
@@ -506,6 +512,16 @@ app.whenReady().then(() => {
           return { success: true, buffer: result };
         } catch (e) {
           console.error('[Excel] 导出失败:', e.message);
+          return { success: false, error: e.message };
+        }
+      });
+
+      // 保存主题到文件（供 splash 窗口启动时读取）
+      ipcMain.handle('theme:save', (_event, data) => {
+        try {
+          fs.writeFileSync(THEME_FILE, JSON.stringify(data), 'utf-8');
+          return { success: true };
+        } catch (e) {
           return { success: false, error: e.message };
         }
       });

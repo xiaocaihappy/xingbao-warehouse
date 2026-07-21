@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { insertItem, uploadImage } from '../supabase';
+import { insertItem, uploadImage, fetchStaffList, addStaffMember, deleteStaffMember, seedDefaultStaff, subscribeToStaffList } from '../supabase';
 import SelectField from '../components/SelectField';
 import * as XLSX from 'xlsx';
 
@@ -19,8 +19,13 @@ const DEFAULT_SALES = ['内销-L', '外贸-菜', '外销-V', '外销-BL', '电�
 // 默认人员选项
 const DEFAULT_STAFF_BASE = ['陈育婷', '蔡丹媛', '蔡中卫', '林沐锟', '丁小梅', '林晓媛'];
 
-// 获取含当前登录用户名的完整人员列表
-function getDefaultStaff() {
+// localStorage key
+const LS_KEY = {
+  sales: 'select_options_sales_channel',
+  staff: 'select_options_staff_name',
+};
+
+function getInitialStaff() {
   const displayName = localStorage.getItem('xingbao_display_name')?.trim();
   if (displayName && !DEFAULT_STAFF_BASE.includes(displayName)) {
     return [displayName, ...DEFAULT_STAFF_BASE];
@@ -28,7 +33,21 @@ function getDefaultStaff() {
   return DEFAULT_STAFF_BASE;
 }
 
-// 普通文本输入字段（单列布局）
+function loadCustom(key) {
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+function saveCustom(key, list) {
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch {}
+}
+
 const TEXT_FIELDS = [
   { key: 'shelf_number', label: '货架号（第几列）', placeholder: '请输入货架号', required: true, accent: 'cyan' },
   { key: 'grid_number', label: '格子', placeholder: '请输入格子编号', accent: 'cyan' },
@@ -39,26 +58,79 @@ const TEXT_FIELDS = [
 export default function Storage({ onStatsChange, onBackHome }) {
   const [form, setForm] = useState(() => {
     const displayName = localStorage.getItem('xingbao_display_name')?.trim();
-    const staffOptions = getDefaultStaff();
+    const staffOptions = getInitialStaff();
     if (displayName && staffOptions.includes(displayName)) {
       return { ...INITIAL_FORM, staff_name: displayName };
     }
     return { ...INITIAL_FORM };
   });
-  const DEFAULT_STAFF = useMemo(() => getDefaultStaff(), []);
+
+  // 受控的销售选项（保留本地存储 + 默认值）
+  const [salesOptions, setSalesOptions] = useState(() => [...DEFAULT_SALES, ...loadCustom(LS_KEY.sales)]);
+
+  // 人员列表：从 Supabase 加载（实时同步）
+  const [staffList, setStaffList] = useState([]); // [{id, name, is_default}, ...]
+  const [staffLoading, setStaffLoading] = useState(true);
+
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [toast, setToast] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [showStaffModal, setShowStaffModal] = useState(false);
   const fileRef = useRef(null);
   const excelRef = useRef(null);
-  const [mounted, setMounted] = useState(false);
+  const subRef = useRef(null);
 
+  // 初始化：首次填充默认人员 + 订阅实时变化
   useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 50);
-    return () => clearTimeout(timer);
+    let cancelled = false;
+    async function initStaff() {
+      try {
+        // 先尝试填充默认人员（如果表为空）
+        await seedDefaultStaff(DEFAULT_STAFF_BASE);
+        // 加载人员列表
+        const { data, error } = await fetchStaffList();
+        if (cancelled) return;
+        if (!error && data) {
+          setStaffList(data);
+        } else {
+          // 失败时回退到本地
+          const local = [...getInitialStaff(), ...loadCustom(LS_KEY.staff)];
+          setStaffList(local.map((name, idx) => ({ id: `local-${idx}`, name, is_default: DEFAULT_STAFF_BASE.includes(name) })));
+        }
+      } catch (e) {
+        if (cancelled) return;
+        // 网络错误时回退到本地
+        const local = [...getInitialStaff(), ...loadCustom(LS_KEY.staff)];
+        setStaffList(local.map((name, idx) => ({ id: `local-${idx}`, name, is_default: DEFAULT_STAFF_BASE.includes(name) })));
+      } finally {
+        if (!cancelled) setStaffLoading(false);
+      }
+    }
+    initStaff();
+
+    // 订阅实时变化
+    subRef.current = subscribeToStaffList(async () => {
+      const { data } = await fetchStaffList();
+      if (data && !cancelled) setStaffList(data);
+    });
+
+    return () => {
+      cancelled = true;
+      subRef.current?.unsubscribe?.();
+    };
   }, []);
+
+  // 从 Supabase 数据派生选项列表
+  const staffOptions = useMemo(() => staffList.map(s => s.name), [staffList]);
+
+  // 同步销售选项到 localStorage
+  function updateSalesOptions(next) {
+    setSalesOptions(next);
+    const custom = next.filter(o => !DEFAULT_SALES.includes(o));
+    saveCustom(LS_KEY.sales, custom);
+  }
 
   function updateField(key, value) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -188,7 +260,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
   }
 
   return (
-    <div className={`stg-page ${mounted ? 'stg-mounted' : ''}`}>
+    <div className="stg-page">
       {toast && <div className={`stg-toast stg-toast--${toast.type}`}>{toast.msg}</div>}
 
       {/* ===== Top Bar ===== */}
@@ -219,7 +291,6 @@ export default function Storage({ onStatsChange, onBackHome }) {
 
         {/* Form */}
         <div className="stg-form">
-          {/* 文本字段（单列） */}
           {TEXT_FIELDS.map((field, i) => (
             <div key={field.key} className={`stg-field stg-field--${field.accent} stg-stagger`} style={{ animationDelay: `${0.08 + i * 0.05}s` }}>
               <label className="stg-field-label">
@@ -238,12 +309,13 @@ export default function Storage({ onStatsChange, onBackHome }) {
             </div>
           ))}
 
-          {/* 销售列（单列布局） */}
+          {/* 销售列 */}
           <div className="stg-stagger" style={{ animationDelay: `${0.08 + 4 * 0.05}s` }}>
             <SelectField
               label="销售列"
               defaultOptions={DEFAULT_SALES}
-              storageKey="sales_channel"
+              options={salesOptions}
+              onOptionsChange={updateSalesOptions}
               value={form.sales_channel}
               onChange={v => updateField('sales_channel', v)}
               placeholder="请选择销售"
@@ -253,18 +325,24 @@ export default function Storage({ onStatsChange, onBackHome }) {
           </div>
 
           {/* 仓储人员（带"管理人员"角标） */}
-          <div className="stg-stagger stg-field-with-badge" style={{ animationDelay: `${0.08 + 5 * 0.05}s` }}>
+          <div
+            className="stg-stagger stg-field-with-badge"
+            style={{ animationDelay: `${0.08 + 5 * 0.05}s` }}
+          >
             <SelectField
               label="仓储人员"
-              defaultOptions={DEFAULT_STAFF}
-              storageKey="staff_name"
+              options={staffOptions}
               value={form.staff_name}
               onChange={v => updateField('staff_name', v)}
-              placeholder="请选择仓储人员"
+              placeholder={staffLoading ? '加载中...' : '请选择仓储人员'}
               required
               accent="purple"
             />
-            <span className="stg-badge">
+            <span
+              className="stg-badge"
+              onClick={(e) => { e.stopPropagation(); setShowStaffModal(true); }}
+              title="管理人员"
+            >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               管理人员
             </span>
@@ -332,6 +410,143 @@ export default function Storage({ onStatsChange, onBackHome }) {
       {/* Background decor */}
       <div className="stg-bg-decor" aria-hidden="true">
         <div className="stg-bg-grid" />
+      </div>
+
+      {/* ===== 人员管理弹窗 ===== */}
+      {showStaffModal && (
+        <StaffManagementModal
+          list={staffList}
+          onClose={() => setShowStaffModal(false)}
+          onAdd={async (name) => {
+            const { error } = await addStaffMember(name);
+            if (error) {
+              showToast(error.message || '添加失败', 'error');
+              return false;
+            }
+            showToast('✓ 已添加人员', 'success');
+            return true;
+          }}
+          onDelete={async (id) => {
+            const { error } = await deleteStaffMember(id);
+            if (error) {
+              showToast(error.message || '删除失败', 'error');
+              return false;
+            }
+            showToast('✓ 已删除人员', 'success');
+            return true;
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ===== 人员管理弹窗组件 =====
+function StaffManagementModal({ list: initialList, onClose, onAdd, onDelete }) {
+  const [list, setList] = useState(initialList);
+  const [newName, setNewName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef(null);
+
+  // 同步外部列表变化（实时订阅）
+  useEffect(() => { setList(initialList); }, [initialList]);
+
+  async function handleAdd() {
+    const name = newName.trim();
+    if (!name || busy) return;
+    setBusy(true);
+    const ok = await onAdd(name);
+    setBusy(false);
+    if (ok) {
+      setNewName('');
+      inputRef.current?.focus();
+    }
+  }
+
+  async function handleDelete(member) {
+    if (busy) return;
+    if (!confirm(`确定删除「${member.name}」？`)) return;
+    setBusy(true);
+    await onDelete(member.id);
+    setBusy(false);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAdd();
+    }
+  }
+
+  return (
+    <div className="stf-modal-overlay" onClick={onClose}>
+      <div className="stf-modal" onClick={e => e.stopPropagation()}>
+        <div className="stf-modal-head">
+          <div>
+            <h2 className="stf-modal-title">人员管理</h2>
+            <p className="stf-modal-subtitle">添加或删除仓储人员（所有用户实时同步）</p>
+          </div>
+          <button className="stf-modal-close" onClick={onClose} aria-label="关闭">×</button>
+        </div>
+
+        <div className="stf-modal-section">
+          <label className="stf-section-label">添加新人员</label>
+          <div className="stf-add-row">
+            <input
+              ref={inputRef}
+              type="text"
+              className="stf-add-input"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="输入姓名"
+              maxLength={20}
+              disabled={busy}
+            />
+            <button
+              type="button"
+              className="stf-add-btn"
+              onClick={handleAdd}
+              disabled={!newName.trim() || busy}
+            >
+              {busy ? (
+                <span className="stf-btn-spinner" />
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+              )}
+              添加
+            </button>
+          </div>
+        </div>
+
+        <div className="stf-modal-section">
+          <label className="stf-section-label">当前人员列表（{list.length}）</label>
+          <div className="stf-staff-list">
+            {list.map(member => {
+              return (
+                <div key={member.id} className="stf-staff-item">
+                  <span className="stf-staff-name">{member.name}</span>
+                  <button
+                    type="button"
+                    className="stf-staff-delete"
+                    onClick={() => handleDelete(member)}
+                    disabled={busy}
+                    title={`删除「${member.name}」`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                </div>
+              );
+            })}
+            {list.length === 0 && (
+              <div className="stf-staff-empty">暂无人员，请添加</div>
+            )}
+          </div>
+        </div>
+
+        <div className="stf-modal-foot">
+          <button className="stf-done-btn" onClick={onClose}>完成</button>
+        </div>
       </div>
     </div>
   );

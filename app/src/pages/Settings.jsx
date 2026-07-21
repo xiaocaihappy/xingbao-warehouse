@@ -1,59 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 
-// ===== 主题预设（6 色 + 自定义） =====
 const THEME_PRESETS = [
-  { id: 'dark',    name: '深色',   colors: ['#0f1a2e', '#00aef0', '#00e5c0'], primary: '200 100% 50%', secondary: '170 100% 45%', bg: '220 25% 8%',   accent: '270 80% 60%', isLight: false },
-  { id: 'light',   name: '亮色',   colors: ['#f5f8fb', '#0077cc', '#008880'], primary: '205 90% 42%', secondary: '175 80% 30%', bg: '210 20% 96%',  accent: '270 60% 55%', isLight: true },
-  { id: 'matcha',  name: '抹茶绿', colors: ['#eef6e8', '#6b9b37', '#3da88a'], primary: '85 50% 42%',  secondary: '165 50% 42%', bg: '85 18% 90%',   accent: '45 60% 48%',  isLight: true },
-  { id: 'pink',    name: '粉色',   colors: ['#fce8f0', '#e8537a', '#c450b0'], primary: '340 75% 55%', secondary: '300 50% 52%', bg: '340 12% 93%',  accent: '10 70% 60%',  isLight: true },
-  { id: 'yellow',  name: '浅黄',   colors: ['#fef9ec', '#d49929', '#c4752a'], primary: '40 75% 48%',  secondary: '25 65% 45%',  bg: '42 25% 94%',   accent: '200 60% 50%', isLight: true },
-  { id: 'blue',    name: '淡蓝',   colors: ['#edf4fa', '#3b8ed4', '#3ea8b8'], primary: '205 80% 52%', secondary: '190 55% 46%', bg: '205 25% 92%',  accent: '250 60% 58%', isLight: true },
+  { id: 'dark',  name: '深色', colors: ['#0f1a2e', '#00aef0', '#00e5c0'], primary: '200 100% 50%', secondary: '170 100% 45%', bg: '220 25% 8%', accent: '270 80% 60%', isLight: false },
+  { id: 'light', name: '浅色', colors: ['#f5f8fb', '#0077cc', '#008880'], primary: '205 90% 42%', secondary: '175 80% 30%', bg: '210 20% 96%', accent: '270 60% 55%', isLight: true },
 ];
-
-const CUSTOM_THEME_ID = 'custom';
 
 const THEME_KEY = 'xingbao_theme';
 const DISPLAY_NAME_KEY = 'xingbao_display_name';
-const CUSTOM_THEME_KEY = 'xingbao_theme_custom';
-
-// 默认自定义配色（深蓝）
-const DEFAULT_CUSTOM = { primaryH: 200, primaryS: 100, primaryL: 50, secondaryH: 170, secondaryS: 100, secondaryL: 45, bgH: 220, bgS: 25, bgL: 8, accentH: 270, accentS: 80, accentL: 60 };
-
-// ===== HSL 滑块子组件 =====
-function ColorSlider({ label, hueField, satField, lumField, colors, onChange }) {
-  const h = colors[hueField];
-  const s = colors[satField];
-  const l = colors[lumField];
-  const swatchColor = `hsl(${h}, ${s}%, ${l}%)`;
-
-  return (
-    <div className="color-slider-group">
-      <div className="color-slider-header">
-        <span className="color-slider-label">{label}</span>
-        <span className="color-slider-swatch" style={{ background: swatchColor }} />
-        <span className="color-slider-hsl">H{h} S{s}% L{l}%</span>
-      </div>
-      <div className="slider-row">
-        <span className="slider-tag">色相</span>
-        <input type="range" min="0" max="360" value={h} className="slider-hue"
-          onChange={e => onChange(hueField, e.target.value)} />
-        <span className="slider-val">{h}°</span>
-      </div>
-      <div className="slider-row">
-        <span className="slider-tag">饱和度</span>
-        <input type="range" min="0" max="100" value={s} className="slider-sat"
-          onChange={e => onChange(satField, e.target.value)} />
-        <span className="slider-val">{s}%</span>
-      </div>
-      <div className="slider-row">
-        <span className="slider-tag">亮度</span>
-        <input type="range" min="0" max="100" value={l} className="slider-lum"
-          onChange={e => onChange(lumField, e.target.value)} />
-        <span className="slider-val">{l}%</span>
-      </div>
-    </div>
-  );
-}
 
 export default function Settings({ user, onLogout, onSwitchAccount }) {
   const [displayName, setDisplayName] = useState(
@@ -67,20 +20,8 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
   const [appVersion, setAppVersion] = useState('');
   const unsubRef = useRef(null);
 
-  // 自定义颜色状态
-  const [showCustomPicker, setShowCustomPicker] = useState(savedTheme === CUSTOM_THEME_ID);
-  const [customColors, setCustomColors] = useState(() => {
-    if (savedTheme === CUSTOM_THEME_ID) {
-      try {
-        const saved = localStorage.getItem(CUSTOM_THEME_KEY);
-        if (saved) return { ...DEFAULT_CUSTOM, ...JSON.parse(saved) };
-      } catch {}
-    }
-    return { ...DEFAULT_CUSTOM };
-  });
-
-  // ===== 核心：将 HSL 变量写入 document ====
-  const applyThemeVarsCore = (primaryHsl, secondaryHsl, bgHsl, accentHsl, isLight) => {
+  // ===== 核心：将 HSL 变量写入 document 并同步到 splash 文件 =====
+  const applyThemeVarsCore = (primaryHsl, secondaryHsl, bgHsl, accentHsl, isLight, themeId) => {
     const root = document.documentElement;
     root.style.setProperty('--primary', primaryHsl);
     root.style.setProperty('--secondary', secondaryHsl);
@@ -116,57 +57,19 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
       root.style.setProperty('--shadow-lg', '0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.08)');
       document.body.className = 'theme-dark';
     }
+
+    // 同步到 splash 窗口使用的文件
+    if (window.electronAPI?.saveTheme) {
+      window.electronAPI.saveTheme({ theme: themeId, isLight }).catch(() => {});
+    }
   };
 
-  // ===== 应用预设主题 =====
   function applyPreset(themeId) {
     const preset = THEME_PRESETS.find(t => t.id === themeId);
     if (!preset) return;
-    applyThemeVarsCore(preset.primary, preset.secondary, preset.bg, preset.accent, preset.isLight);
+    applyThemeVarsCore(preset.primary, preset.secondary, preset.bg, preset.accent, preset.isLight, themeId);
     localStorage.setItem(THEME_KEY, themeId);
-    localStorage.removeItem(CUSTOM_THEME_KEY);
     setActiveTheme(themeId);
-    setShowCustomPicker(false);
-  }
-
-  // ===== 应用自定义主题 =====
-  function applyCustom(c) {
-    const c2 = c || customColors;
-    const bgLightness = parseInt(c2.bgL);
-    const isLight = bgLightness > 50;
-    applyThemeVarsCore(
-      `${c2.primaryH} ${c2.primaryS}% ${c2.primaryL}%`,
-      `${c2.secondaryH} ${c2.secondaryS}% ${c2.secondaryL}%`,
-      `${c2.bgH} ${c2.bgS}% ${c2.bgL}%`,
-      `${c2.accentH} ${c2.accentS}% ${c2.accentL}%`,
-      isLight
-    );
-    localStorage.setItem(THEME_KEY, CUSTOM_THEME_ID);
-    localStorage.setItem(CUSTOM_THEME_KEY, JSON.stringify(c2));
-    setActiveTheme(CUSTOM_THEME_ID);
-  }
-
-  // ===== 更新单个 HSL 值并即时预览 =====
-  function updateCustomField(field, value) {
-    const next = { ...customColors, [field]: Number(value) };
-    setCustomColors(next);
-    applyCustom(next);
-  }
-
-  // ===== 重置自定义到默认 =====
-  function resetCustom() {
-    setCustomColors({ ...DEFAULT_CUSTOM });
-    applyCustom(DEFAULT_CUSTOM);
-  }
-
-  // ===== 预设色板点击 =====
-  function handleSwatchClick(preset) {
-    if (preset.id === CUSTOM_THEME_ID) {
-      setShowCustomPicker(true);
-      applyCustom();
-      return;
-    }
-    applyPreset(preset.id);
   }
 
   // 获取应用版本号
@@ -183,7 +86,6 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
     if (window.electronAPI?.onUpdateStatus) {
       unsubRef.current = window.electronAPI.onUpdateStatus((s) => {
         setUpdateStatus(s);
-        // 根据事件类型显示 toast
         if (s.event === 'no-update') showToast('✓ 已是最新版本', 'success');
         else if (s.event === 'available') showToast(`发现新版本 v${s.version}`, 'success');
         else if (s.event === 'error') showToast(s.message || '检查更新失败', 'error');
@@ -215,7 +117,6 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
     setUpdateStatus({ event: 'checking' });
     showToast('正在检查更新...', 'success');
     try {
-      // 设置 10s 超时
       await Promise.race([
         window.electronAPI.checkForUpdates(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('检查超时')), 10000)),
@@ -344,18 +245,18 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
         </div>
       </div>
 
-      {/* 3. 主题颜色 */}
+      {/* 3. 主题颜色（仅深色 / 浅色） */}
       <div className="settings-card">
         <div className="settings-card-icon">🎨</div>
         <div className="settings-card-body">
           <h3>主题颜色</h3>
-          <p className="settings-card-desc">选择你喜欢的界面配色方案，或自定义专属色调</p>
+          <p className="settings-card-desc">选择深色或浅色主题，开屏页将自动跟随</p>
           <div className="theme-grid">
             {THEME_PRESETS.map(preset => (
               <button
                 key={preset.id}
                 className={`theme-swatch ${activeTheme === preset.id ? 'active' : ''}`}
-                onClick={() => handleSwatchClick(preset)}
+                onClick={() => applyPreset(preset.id)}
                 title={preset.name}
               >
                 <span className="theme-dots">
@@ -366,41 +267,11 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
                 <span className="theme-name">{preset.name}</span>
               </button>
             ))}
-            {THEME_PRESETS.length <= 6 && (
-              <button
-                className={`theme-swatch custom-swatch ${activeTheme === CUSTOM_THEME_ID ? 'active' : ''}`}
-                onClick={() => handleSwatchClick({ id: CUSTOM_THEME_ID })}
-                title="自定义"
-              >
-                <span className="theme-dots custom-dots">
-                  <span className="theme-dot-rainbow" />
-                </span>
-                <span className="theme-name">自定义</span>
-              </button>
-            )}
           </div>
-
-          {/* 自定义色调面板 */}
-          {showCustomPicker && (
-            <div className="custom-picker">
-              <div className="custom-picker-header">
-                <span className="custom-picker-title">🎛 自定义色调</span>
-                <button className="btn btn-xs btn-outline" onClick={resetCustom}>↺ 重置</button>
-              </div>
-              <div className="custom-row">
-                <ColorSlider label="主色调" hueField="primaryH" satField="primaryS" lumField="primaryL" colors={customColors} onChange={updateCustomField} />
-                <ColorSlider label="辅色调" hueField="secondaryH" satField="secondaryS" lumField="secondaryL" colors={customColors} onChange={updateCustomField} />
-              </div>
-              <div className="custom-row">
-                <ColorSlider label="强调色" hueField="accentH" satField="accentS" lumField="accentL" colors={customColors} onChange={updateCustomField} />
-                <ColorSlider label="背景色" hueField="bgH" satField="bgS" lumField="bgL" colors={customColors} onChange={updateCustomField} />
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* 4. 账户管理（退出登录 + 切换账号合并） */}
+      {/* 4. 账户管理 */}
       <div className="settings-card">
         <div className="settings-card-icon">🔑</div>
         <div className="settings-card-body">

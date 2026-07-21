@@ -158,3 +158,72 @@ export function subscribeToItems(callback) {
     )
     .subscribe();
 }
+
+// ============================================================
+// 人员列表（所有用户实时同步）
+// ============================================================
+const STAFF_TABLE = 'staff_list';
+
+// 获取所有人员（默认 + 自定义，按 id 排序）
+export async function fetchStaffList() {
+  const { data, error } = await supabase
+    .from(STAFF_TABLE)
+    .select('*')
+    .order('id', { ascending: true });
+  return { data: data || [], error };
+}
+
+// 添加人员（去重）
+export async function addStaffMember(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return { data: null, error: { message: '姓名不能为空' } };
+  // 先检查是否已存在
+  const { data: existing } = await supabase
+    .from(STAFF_TABLE)
+    .select('id')
+    .eq('name', trimmed)
+    .maybeSingle();
+  if (existing) {
+    return { data: existing, error: { message: '该姓名已存在' } };
+  }
+  const { data, error } = await supabase
+    .from(STAFF_TABLE)
+    .insert([{ name: trimmed, is_default: false }])
+    .select()
+    .single();
+  return { data, error };
+}
+
+// 删除人员
+export async function deleteStaffMember(id) {
+  const { error } = await supabase
+    .from(STAFF_TABLE)
+    .delete()
+    .eq('id', id);
+  return { error };
+}
+
+// 初始化默认人员（仅当表为空时）
+export async function seedDefaultStaff(defaultNames = []) {
+  if (!defaultNames.length) return;
+  const { data: existing } = await supabase
+    .from(STAFF_TABLE)
+    .select('id')
+    .limit(1);
+  if (existing && existing.length > 0) return; // 已有数据，跳过
+
+  const rows = defaultNames.map(name => ({ name, is_default: true }));
+  await supabase.from(STAFF_TABLE).insert(rows);
+}
+
+// 实时订阅人员变化
+export function subscribeToStaffList(callback) {
+  return supabase
+    .channel('staff-list-changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: STAFF_TABLE },
+      (payload) => callback(payload)
+    )
+    .subscribe();
+}
