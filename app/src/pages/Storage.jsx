@@ -25,6 +25,82 @@ const LS_KEY = {
   staff: 'select_options_staff_name',
 };
 
+// 输入历史管理（每个字段保留最近5条）
+const HISTORY_KEY_PREFIX = 'xingbao_input_history_';
+const MAX_HISTORY = 5;
+function getFieldHistory(fieldKey) {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY_PREFIX + fieldKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    }
+  } catch {}
+  return [];
+}
+function addFieldHistory(fieldKey, value) {
+  if (!value || !value.trim()) return;
+  const history = getFieldHistory(fieldKey);
+  const filtered = history.filter(h => h !== value.trim());
+  filtered.unshift(value.trim());
+  const trimmed = filtered.slice(0, MAX_HISTORY);
+  try { localStorage.setItem(HISTORY_KEY_PREFIX + fieldKey, JSON.stringify(trimmed)); } catch {}
+}
+function clearFieldHistory(fieldKey) {
+  try { localStorage.removeItem(HISTORY_KEY_PREFIX + fieldKey); } catch {}
+}
+
+// 带历史记录的下拉输入框组件
+function HistoryInput({ value, onChange, placeholder, fieldKey }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const history = getFieldHistory(fieldKey);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  return (
+    <div className='stg-field-input-wrap' ref={ref} style={{ position: 'relative' }}>
+      <input
+        type='text'
+        className='stg-field-input'
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => history.length > 0 && setOpen(true)}
+        placeholder={placeholder}
+      />
+      {history.length > 0 && (
+        <button
+          type='button'
+          className='stg-history-toggle'
+          onClick={() => setOpen(!open)}
+          tabIndex={-1}
+          title='历史记录'
+        >&#x25BC;</button>
+      )}
+      {open && history.length > 0 && (
+        <div className='stg-history-dropdown'>
+          {history.map((h, hi) => (
+            <div
+              key={hi}
+              className='stg-history-item'
+              onMouseDown={() => { onChange(h); setOpen(false); }}
+            >{h}</div>
+          ))}
+          <div className='stg-history-clear' onMouseDown={() => { clearFieldHistory(fieldKey); setOpen(false); }}>
+            清除历史
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getInitialStaff() {
   const displayName = localStorage.getItem('xingbao_display_name')?.trim();
   if (displayName && !DEFAULT_STAFF_BASE.includes(displayName)) {
@@ -49,10 +125,10 @@ function saveCustom(key, list) {
 }
 
 const TEXT_FIELDS = [
-  { key: 'shelf_number', label: '货架号（第几列）', placeholder: '请输入货架号', required: true, accent: 'cyan' },
-  { key: 'grid_number', label: '格子', placeholder: '请输入格子编号', accent: 'cyan' },
-  { key: 'product_code', label: '货号', placeholder: '请输入货号', accent: 'purple' },
-  { key: 'stamp_code', label: '移印编号', placeholder: '请输入移印编号', required: true, accent: 'cyan' },
+  { key: 'shelf_number', label: '货架号（第几列）', placeholder: '请输入货架号', required: true, accent: 'cyan', hasHistory: true },
+  { key: 'grid_number', label: '格子', placeholder: '请输入格子编号', accent: 'cyan', hasHistory: true },
+  { key: 'product_code', label: '货号', placeholder: '请输入货号', accent: 'purple', hasHistory: true },
+  { key: 'stamp_code', label: '移印编号', placeholder: '请输入移印编号', required: true, accent: 'cyan', hasHistory: true },
 ];
 
 export default function Storage({ onStatsChange, onBackHome }) {
@@ -76,6 +152,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
   const [uploading, setUploading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [toast, setToast] = useState(null);
+  const [saveStatus, setSaveStatus] = useState(null); // 'success' | 'error' | null
   const [dragOver, setDragOver] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const fileRef = useRef(null);
@@ -241,10 +318,14 @@ export default function Storage({ onStatsChange, onBackHome }) {
     setLoading(false);
     if (!error) {
       showToast('✓ 样品信息保存成功', 'success');
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus(null), 4000);
       setForm({ ...INITIAL_FORM });
       onStatsChange?.();
     } else {
       showToast('保存失败: ' + error.message, 'error');
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(null), 4000);
     }
   }
 
@@ -260,8 +341,9 @@ export default function Storage({ onStatsChange, onBackHome }) {
   }
 
   return (
-    <div className="stg-page">
+    <>
       {toast && <div className={`stg-toast stg-toast--${toast.type}`}>{toast.msg}</div>}
+      <div className="stg-page">
 
       {/* ===== Top Bar ===== */}
       <div className="stg-topbar">
@@ -438,6 +520,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
         />
       )}
     </div>
+    </>
   );
 }
 

@@ -199,6 +199,7 @@ body::after {
 
 .form-group input,
 .form-group textarea,
+.form-group select,
 .search-input,
 .search-select {
   width: 100%;
@@ -220,6 +221,7 @@ body::after {
 
 .form-group input:focus,
 .form-group textarea:focus,
+.form-group select:focus,
 .search-input:focus,
 .search-select:focus {
   border-color: hsl(var(--primary));
@@ -2753,6 +2755,67 @@ body.theme-light {
 }
 
 /* ---- Field Card ---- */
+
+/* ---- Input History Dropdown ---- */
+.stg-history-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: hsl(215, 15%, 50%);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+.stg-history-toggle:hover { color: #00c8ff; }
+.stg-history-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: hsl(220, 20%, 14%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 2px;
+}
+.stg-history-item {
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  color: hsl(215, 15%, 80%);
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.stg-history-item:hover { background: rgba(0, 200, 255, 0.08); color: #00c8ff; }
+.stg-history-item:last-child { border-bottom: none; }
+.stg-history-clear {
+  padding: 8px 14px;
+  font-size: 12px;
+  text-align: center;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  transition: color 0.2s;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.stg-history-clear:hover { color: #ef4444; }
+
+.theme-light .stg-history-dropdown {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.1);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+.theme-light .stg-history-item { color: #334155; border-bottom-color: rgba(0,0,0,0.04); }
+.theme-light .stg-history-item:hover { background: rgba(0, 120, 210, 0.06); color: #0078d4; }
+.theme-light .stg-history-clear { color: rgba(0,0,0,0.3); }
+.theme-light .stg-history-clear:hover { color: #ef4444; }
 .stg-field {
   position: relative;
   padding-left: 0;
@@ -2897,7 +2960,7 @@ body.theme-light {
 /* ---- Image Upload ---- */
 .stg-upload-btn {
   width: 100%;
-  background: rgba(15, 25, 45, 0.5);
+  background: transparent;
   border: 1px dashed rgba(0, 200, 255, 0.25);
   border-radius: 8px;
   padding: 14px 16px;
@@ -2989,6 +3052,35 @@ body.theme-light {
   border-color: #00c8ff;
 }
 .stg-upload-change:disabled { opacity: 0.5; cursor: not-allowed; }
+
+
+.stg-save-status {
+  text-align: center;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 12px;
+  animation: stgFadeIn 0.3s ease;
+}
+.stg-save-status--success {
+  background: rgba(20, 184, 166, 0.15);
+  color: #14b8a6;
+  border: 1px solid rgba(20, 184, 166, 0.25);
+}
+.stg-save-status--error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.theme-light .stg-save-status--success {
+  background: rgba(20, 184, 166, 0.08);
+  color: #0d9488;
+}
+.theme-light .stg-save-status--error {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+}
 
 /* ---- Bottom Actions ---- */
 .stg-actions {

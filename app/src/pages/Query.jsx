@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchItems, updateItem, deleteItem, subscribeToItems, uploadImage } from '../supabase';
+import { fetchItems, updateItem, deleteItem, subscribeToItems, uploadImage, fetchStaffList, subscribeToStaffList, seedDefaultStaff } from '../supabase';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 
@@ -18,6 +18,45 @@ export default function Query({ onStatsChange }) {
   const [editModal, setEditModal] = useState(null);
   const [toast, setToast] = useState(null);
   const [expandedImage, setExpandedImage] = useState(null);
+  const [staffList, setStaffList] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(true);
+
+  // 加载人员列表（与存储系统同步）
+  const DEFAULT_STAFF_NAMES = ['陈育婷', '蔡丹媛', '蔡中卫', '林沐锟', '丁小梅', '林晓媛'];
+  useEffect(() => {
+    let cancelled = false;
+    async function loadStaff() {
+      try {
+        await seedDefaultStaff(DEFAULT_STAFF_NAMES);
+        const { data } = await fetchStaffList();
+        if (data && data.length > 0 && !cancelled) {
+          setStaffList(data);
+          localStorage.setItem('xingbao_staff_fallback', JSON.stringify(data.map(s => s.name)));
+        } else if (!cancelled) {
+          const fallback = localStorage.getItem('xingbao_staff_fallback');
+          const names = fallback ? JSON.parse(fallback) : DEFAULT_STAFF_NAMES;
+          setStaffList(names.map((n, i) => ({ id: 'local-' + i, name: n })));
+        }
+      } catch {
+        if (!cancelled) {
+          const fallback = localStorage.getItem('xingbao_staff_fallback');
+          const names = fallback ? JSON.parse(fallback) : DEFAULT_STAFF_NAMES;
+          setStaffList(names.map((n, i) => ({ id: 'local-' + i, name: n })));
+        }
+      }
+      if (!cancelled) setStaffLoading(false);
+    }
+    loadStaff();
+    const sub = subscribeToStaffList(async () => {
+      const { data } = await fetchStaffList();
+      if (data && data.length > 0 && !cancelled) {
+        setStaffList(data);
+        localStorage.setItem('xingbao_staff_fallback', JSON.stringify(data.map(s => s.name)));
+      }
+    });
+    return () => { cancelled = true; sub?.unsubscribe?.(); };
+  }, []);
+
 
   useEffect(() => {
     loadItems();
@@ -225,11 +264,11 @@ export default function Query({ onStatsChange }) {
           <button className="btn btn-primary-glow" onClick={loadItems}>查询</button>
         </div>
         <div className="filter-row">
-          <select className="filter-select" value={channelFilter} onChange={e => setChannelFilter(e.target.value)}>
+          <select className="filter-select" value={channelFilter} onChange={e => setChannelFilter(e.target.value)} onMouseDown={e => e.stopPropagation()}>
             <option value="">全部渠道</option>
             {channels.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <select className="filter-select" value={yearFilter} onChange={e => setYearFilter(e.target.value)}>
+          <select className="filter-select" value={yearFilter} onChange={e => setYearFilter(e.target.value)} onMouseDown={e => e.stopPropagation()}>
             <option value="">全部年份</option>
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
@@ -386,7 +425,17 @@ export default function Query({ onStatsChange }) {
               </div>
               <div className="form-group">
                 <label>人员</label>
-                <input type="text" value={editModal.staff_name || ''} onChange={e => setEditModal({ ...editModal, staff_name: e.target.value })} />
+                <select
+                  value={editModal.staff_name || ''}
+                  onChange={e => setEditModal({ ...editModal, staff_name: e.target.value })}
+                  onMouseDown={e => e.stopPropagation()}
+                  disabled={staffLoading}
+                >
+                  <option value="">{staffLoading ? '加载中...' : '请选择人员'}</option>
+                  {staffList.map(s => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label>格子号</label>
@@ -399,11 +448,19 @@ export default function Query({ onStatsChange }) {
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                 <label>样品图片</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  {editModal.image_url && editModal.image_url !== 'EMPTY' && (
-                    <img src={editModal.image_url} alt="预览" className="upload-preview-img" style={{ maxWidth: 120, maxHeight: 120 }} />
-                  )}
+                  {editModal.image_url && editModal.image_url !== 'EMPTY' ? (
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <img src={editModal.image_url} alt="预览" className="upload-preview-img" style={{ maxWidth: 120, maxHeight: 120 }} />
+                      <button
+                        type="button"
+                        onClick={() => setEditModal({ ...editModal, image_url: '' })}
+                        className="img-delete-btn"
+                        title="删除图片"
+                      >×</button>
+                    </div>
+                  ) : null}
                   <label className="btn btn-outline btn-sm" style={{ cursor: 'pointer' }}>
-                    更换图片
+                    {editModal.image_url && editModal.image_url !== 'EMPTY' ? '更换图片' : '添加图片'}
                     <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
                   </label>
                 </div>
@@ -419,7 +476,7 @@ export default function Query({ onStatsChange }) {
 
       {/* 图片放大预览弹窗 */}
       {expandedImage && (
-        <div className="image-lightbox" onClick={() => setExpandedImage(null)}>
+        <div className="image-lightbox" key={expandedImage?.id} onClick={() => setExpandedImage(null)}>
           <button className="image-lightbox-close" onClick={() => setExpandedImage(null)} aria-label="关闭预览">×</button>
           <div className="image-lightbox-content" onClick={e => e.stopPropagation()}>
             <img

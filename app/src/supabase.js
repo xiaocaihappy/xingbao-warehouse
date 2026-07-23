@@ -227,3 +227,13 @@ export function subscribeToStaffList(callback) {
     )
     .subscribe();
 }
+
+export async function resetPassword(email) {
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email);
+  return { data, error };
+}
+
+export async function updatePassword(password) {
+  const { data, error } = await supabase.auth.updateUser({ password });
+  return { data, error };
+}
