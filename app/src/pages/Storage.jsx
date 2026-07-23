@@ -1,4 +1,5 @@
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useRef, useMemo, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { insertItem, uploadImage, fetchStaffList, addStaffMember, deleteStaffMember, seedDefaultStaff, subscribeToStaffList } from '../supabase';
 import SelectField from '../components/SelectField';
 import * as XLSX from 'xlsx';
@@ -50,25 +51,55 @@ function clearFieldHistory(fieldKey) {
   try { localStorage.removeItem(HISTORY_KEY_PREFIX + fieldKey); } catch {}
 }
 
-// 带历史记录的下拉输入框组件
+// 带历史记录的下拉输入框组件（Portal 渲染，解决层级穿透问题）
 function HistoryInput({ value, onChange, placeholder, fieldKey }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef = useRef(null);
+  const dropdownRef = useRef(null);
   const history = getFieldHistory(fieldKey);
+
+  function updatePosition() {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + 6,
+      left: rect.left,
+      width: rect.width,
+    });
+  }
+
+  useLayoutEffect(() => {
+    if (open) updatePosition();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => updatePosition();
+    window.addEventListener("scroll", handler, true);
+    window.addEventListener("resize", handler);
+    return () => {
+      window.removeEventListener("scroll", handler, true);
+      window.removeEventListener("resize", handler);
+    };
+  }, [open]);
 
   useEffect(() => {
     function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (triggerRef.current && !triggerRef.current.contains(e.target)) {
+        const inDropdown = dropdownRef.current && dropdownRef.current.contains(e.target);
+        if (!inDropdown) setOpen(false);
+      }
     }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
   return (
-    <div className='stg-field-input-wrap' ref={ref} style={{ position: 'relative' }}>
+    <div className="stg-field-input-wrap" ref={triggerRef} style={{ position: "relative" }}>
       <input
-        type='text'
-        className='stg-field-input'
+        type="text"
+        className="stg-field-input"
         value={value}
         onChange={e => onChange(e.target.value)}
         onFocus={() => history.length > 0 && setOpen(true)}
@@ -76,26 +107,36 @@ function HistoryInput({ value, onChange, placeholder, fieldKey }) {
       />
       {history.length > 0 && (
         <button
-          type='button'
-          className='stg-history-toggle'
+          type="button"
+          className="stg-history-toggle"
           onClick={() => setOpen(!open)}
           tabIndex={-1}
-          title='历史记录'
+          title="历史记录"
         >&#x25BC;</button>
       )}
-      {open && history.length > 0 && (
-        <div className='stg-history-dropdown'>
+      {open && history.length > 0 && createPortal(
+        <div
+          ref={dropdownRef}
+          className="stg-history-dropdown stg-history-dropdown--portal"
+          style={{
+            position: "fixed",
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+          }}
+        >
           {history.map((h, hi) => (
             <div
               key={hi}
-              className='stg-history-item'
+              className="stg-history-item"
               onMouseDown={() => { onChange(h); setOpen(false); }}
             >{h}</div>
           ))}
-          <div className='stg-history-clear' onMouseDown={() => { clearFieldHistory(fieldKey); setOpen(false); }}>
+          <div className="stg-history-clear" onMouseDown={() => { clearFieldHistory(fieldKey); setOpen(false); }}>
             清除历史
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -317,6 +358,9 @@ export default function Storage({ onStatsChange, onBackHome }) {
     const { error } = await insertItem(submitData);
     setLoading(false);
     if (!error) {
+      TEXT_FIELDS.forEach(field => {
+        if (field.hasHistory) addFieldHistory(field.key, form[field.key]);
+      });
       showToast('✓ 样品信息保存成功', 'success');
       setSaveStatus('success');
       setTimeout(() => setSaveStatus(null), 4000);
@@ -379,15 +423,24 @@ export default function Storage({ onStatsChange, onBackHome }) {
                 {field.label}
                 {field.required && <span className="stg-field-required">*</span>}
               </label>
-              <div className="stg-field-input-wrap">
-                <input
-                  type="text"
-                  className="stg-field-input"
+              {field.hasHistory ? (
+                <HistoryInput
                   value={form[field.key]}
-                  onChange={e => updateField(field.key, e.target.value)}
+                  onChange={v => updateField(field.key, v)}
                   placeholder={field.placeholder}
+                  fieldKey={field.key}
                 />
-              </div>
+              ) : (
+                <div className="stg-field-input-wrap">
+                  <input
+                    type="text"
+                    className="stg-field-input"
+                    value={form[field.key]}
+                    onChange={e => updateField(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                  />
+                </div>
+              )}
             </div>
           ))}
 
