@@ -181,17 +181,34 @@ function AppLoader() {
 
 // ===== 应用内容：根据 Auth 状态切换登录/主界面 =====
 function AppContent() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, configError, signOut } = useAuth();
   const [showCloseDialog, setShowCloseDialog] = useState(false);
 
   // 全局关闭请求监听
-  useState(() => {
+  useEffect(() => {
     if (!window.electronAPI?.onCloseRequest) return;
     const unsub = window.electronAPI.onCloseRequest(() => {
       setShowCloseDialog(true);
     });
     return unsub;
   }, []);
+
+  if (configError) {
+    return (
+      <div className="login-container">
+        <div style={{ textAlign: "center", maxWidth: 480, padding: 32 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚙️</div>
+          <h2 style={{ color: "var(--text)", marginBottom: 8 }}>配置错误</h2>
+          <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 16 }}>
+            {configError}
+          </p>
+          <p style={{ color: "var(--text-secondary)", fontSize: 12 }}>
+            如果是安装版，请等待包含正确配置的新版本；如果是开发环境，请在 app 目录下创建有效的 .env 文件后重新构建。
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return <AppLoader />;

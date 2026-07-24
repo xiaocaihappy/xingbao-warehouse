@@ -3,7 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// 配置缺失时不让 createClient 同步抛错（否则整包加载即崩、ErrorBoundary 接不住）
+export const SUPABASE_CONFIG_ERROR =
+  !supabaseUrl || !supabaseAnonKey
+    ? 'Supabase 配置缺失：VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 未注入。打包时请确保存在有效的 .env 文件。'
+    : null;
+
+export const supabase = SUPABASE_CONFIG_ERROR
+  ? null
+  : createClient(supabaseUrl, supabaseAnonKey, {
   realtime: {
     params: {
       eventsPerSecond: 10,

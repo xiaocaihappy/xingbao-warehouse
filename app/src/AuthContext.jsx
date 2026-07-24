@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import {
   supabase,
+  SUPABASE_CONFIG_ERROR,
   getCurrentUser,
   getSession,
   onAuthStateChange,
@@ -17,14 +18,20 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [configError, setConfigError] = useState(SUPABASE_CONFIG_ERROR);
 
   const refreshUser = useCallback(async () => {
+    if (!supabase) return null;
     const current = await getCurrentUser();
     setUser(current);
     return current;
   }, []);
 
   useEffect(() => {
+    if (configError) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
 
     async function init() {
@@ -93,6 +100,7 @@ export function AuthProvider({ children }) {
         user,
         session,
         loading,
+        configError,
         signIn,
         signUp,
         signOut,
