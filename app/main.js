@@ -160,7 +160,7 @@ function createWindow() {
         sandbox: true,
         webSecurity: true,
       },
-      title: '星堡移印样品仓储系统',
+      title: '星堡移印仓储系统',
       autoHideMenuBar: true,
     });
 

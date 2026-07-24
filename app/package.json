@@ -1,7 +1,7 @@
 {
     "name":  "xingbao-warehouse",
     "version":  "1.1.22",
-    "description":  "星堮移印样品仓储系统",
+    "description":  "星堡移印仓储系统",
     "main":  "main.js",
     "author":  {
                    "name":  "星堮科技"
@@ -34,7 +34,7 @@
                         },
     "build":  {
                   "appId":  "com.xingbao.warehouse",
-                  "productName":  "xingbao-warehouse",
+                  "productName":  "星堡移印仓储系统",
                   "directories":  {
                                       "output":  "release-build"
                                   },
@@ -77,8 +77,8 @@
                                "allowToChangeInstallationDirectory":  true,
                                "createDesktopShortcut":  true,
                                "createStartMenuShortcut":  true,
-                               "shortcutName":  "星堮移印仓储系统",
-                               "uninstallDisplayName":  "星堮移印仓储系统",
+                               "shortcutName":  "星堡移印仓储系统",
+                               "uninstallDisplayName":  "星堡移印仓储系统",
                                "deleteAppDataOnUninstall":  false,
                                "displayLanguageSelector":  false,
                                "allowElevation":  true,
