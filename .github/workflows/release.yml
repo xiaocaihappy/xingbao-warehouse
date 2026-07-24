@@ -35,6 +35,21 @@ jobs:
         run: |
           "# placeholder" | Out-File -FilePath token.txt -Encoding utf8
 
+      - name: Write .env from secrets
+        working-directory: app
+        shell: pwsh
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:VITE_SUPABASE_URL)) {
+            Write-Error "Secret VITE_SUPABASE_URL 未配置。请在 GitHub 仓库 Settings -> Secrets and variables -> Actions 添加 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。"
+            exit 1
+          }
+          "VITE_SUPABASE_URL=$env:VITE_SUPABASE_URL" | Out-File -FilePath .env -Encoding utf8
+          "VITE_SUPABASE_ANON_KEY=$env:VITE_SUPABASE_ANON_KEY" | Out-File -FilePath .env -Encoding utf8 -Append
+          Write-Host ".env 已生成（值已隐藏）"
+
       - name: Install dependencies
         working-directory: app
         run: npm ci

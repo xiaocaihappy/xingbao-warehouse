@@ -171,6 +171,28 @@ function createWindow() {
       console.error(`[MainWindow] did-fail-load: code=${errorCode} desc=${errorDescription} url=${url}`);
     });
 
+    // 渲染进程 console 转发到 crash.log（用于诊断"白屏只剩背景"问题）
+    // 这能抓到 <script type="module"> 加载失败、JS 运行时错误等 did-fail-load 抓不到的问题
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const levelName = ['LOG', 'WARN', 'ERROR'][level] || `LVL${level}`;
+      const src = sourceId ? sourceId.replace(/^file:\/\/\/[A-Za-z]:/, '') : '';
+      const lineInfo = line > 0 ? `:${line}` : '';
+      try {
+        fs.appendFileSync(
+          CRASH_LOG_FILE,
+          `[${new Date().toISOString()}] [RENDERER_CONSOLE:${levelName}] ${message}${src ? ` (${src}${lineInfo})` : ''}\n`,
+          'utf-8'
+        );
+      } catch {}
+      // ERROR 级别同时输出到 stdout 方便调试
+      if (level === 2) console.error(`[Renderer] ${message} (${src}${lineInfo})`);
+    });
+
+    // 捕获渲染进程未处理的异步错误
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+      writeCrashLog('RENDER_PROCESS_GONE_MAIN_WINDOW', new Error(`reason=${details.reason} exitCode=${details.exitCode}`));
+    });
+
     mainWindow.webContents.on('crashed', (event, killed) => {
       writeCrashLog('RENDERER_CRASHED', new Error(`killed=${killed}`));
       console.error('[MainWindow] Renderer process crashed! killed=', killed);

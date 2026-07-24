@@ -16,8 +16,46 @@ autoUpdater.autoDownload = false;          // 手动控制下载时机
 autoUpdater.autoInstallOnAppQuit = true;   // 退出时自动安装
 autoUpdater.allowDowngrade = false;
 autoUpdater.disableWebInstaller = true;    // NSIS 不使用 web installer
+// 关键：禁用差分下载。差分下载在弱网/中断场景下会生成不完整的 app.asar（v1.1.21 实测：差分后 asar 只有 58MB，正确应该是 ~100MB）
+// 差分能省几 MB 流量，但代价是用户更新后白屏、调试 22 秒。不值得。
+autoUpdater.disableDifferentialDownload = true;
 // 增加请求超时时间（国内网络可能较慢）
 autoUpdater.requestHeaders = { 'User-Agent': 'xingbao-warehouse-updater/1.0' };
+
+// 下载完成 → 安装前的 asar 完整性校验（防止差分/网络异常导致损坏的 asar 替换正常文件）
+const fsLocal = require('fs');
+const pathLocal = require('path');
+const EXPECTED_MIN_ASAR_SIZE = 80 * 1024 * 1024; // 80MB：v1.1.21 完整 asar 应在 100MB 左右，下限 80MB 防止半截文件
+const _origQuitAndInstall = autoUpdater.quitAndInstall.bind(autoUpdater);
+autoUpdater.quitAndInstall = function (...args) {
+  try {
+    // electron-updater 在 %APPDATA%\<appName>\pending\ 下放更新用的临时 asar
+    const pendingDir = pathLocal.join(app.getPath('userData'), 'pending');
+    if (fsLocal.existsSync(pendingDir)) {
+      const files = fsLocal.readdirSync(pendingDir);
+      for (const f of files) {
+        if (f.endsWith('.asar') || f.endsWith('.asar.gz') || f.endsWith('.asar.bz2')) {
+          const full = pathLocal.join(pendingDir, f);
+          const stat = fsLocal.statSync(full);
+          console.log(`[Updater] 预安装 asar 校验: ${f} = ${(stat.size / 1024 / 1024).toFixed(1)}MB`);
+          if (stat.size < EXPECTED_MIN_ASAR_SIZE) {
+            const err = `更新包文件不完整 (${(stat.size / 1024 / 1024).toFixed(1)}MB < 80MB)，已拒绝安装以保护原版本。请重试更新或手动下载完整安装包。`;
+            console.error('[Updater]', err);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('update:status', { event: 'error', message: err });
+            }
+            // 清理损坏文件，避免下次启动时 electron-updater 又用这个半截文件
+            try { fsLocal.unlinkSync(full); } catch {}
+            return false;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Updater] asar 预校验异常（不阻止安装）:', e.message);
+  }
+  return _origQuitAndInstall(...args);
+};
 
 // 添加日志（方便排查问题）
 autoUpdater.logger = {

@@ -8,7 +8,25 @@
     <link rel="preconnect" href="https://kxtsomnzksxqkuhieqxg.supabase.co" crossorigin />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- 降级 UI：React 挂载成功后会被替换；若 JS 加载失败，至少有可见提示 -->
+      <div id="__boot_fallback" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:linear-gradient(135deg,#0f131a 0%,#121421 50%,#0f131a 100%);color:#9ca3af;font-family:'Segoe UI','Microsoft YaHei',sans-serif;text-align:center;padding:32px;z-index:9999">
+        <div style="font-size:48px;margin-bottom:16px">⏳</div>
+        <div style="font-size:16px;margin-bottom:8px;color:#e5e7eb">星堡移印仓储系统正在加载...</div>
+        <div id="__boot_error" style="font-size:12px;color:#6b7280;max-width:420px;display:none"></div>
+        <div style="margin-top:24px;font-size:11px;color:#4b5563">如果长时间无响应，请按 Ctrl+Shift+I 打开控制台并联系技术支持</div>
+      </div>
+    </div>
+    <script>
+      // 8 秒后若 React 还没替换 fallback，显示错误提示
+      window.__bootTimer = setTimeout(function() {
+        var err = document.getElementById('__boot_error');
+        if (err && document.getElementById('__boot_fallback')) {
+          err.style.display = 'block';
+          err.textContent = '应用主程序加载超时。可能原因：更新文件不完整或被安全软件拦截。';
+        }
+      }, 8000);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
