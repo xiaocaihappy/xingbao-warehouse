@@ -1,7 +1,13 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const updater = require('./updater');
+let updater = null;
+function getUpdater() {
+  if (!updater) {
+    try { updater = require('./updater'); } catch { updater = { checkForUpdates: () => {} }; }
+  }
+  return updater;
+}
 const ExcelJS = require('exceljs');
 
 // ===== 崩溃日志系统 =====
@@ -62,6 +68,19 @@ if (!gpuBlacklist) {
 try { app.commandLine.appendSwitch('disable-background-timer-throttling'); } catch {}
 // 禁用不必要的磁盘缓存检查
 try { app.commandLine.appendSwitch('disable-features', 'PreloadMediaEngagementData,MediaEngagementBypassAutoplayPolicies'); } catch {}
+// ===== 启动优化：减少后台任务和网络请求 =====
+try { app.commandLine.appendSwitch('disable-background-networking'); } catch {}
+try { app.commandLine.appendSwitch('disable-background-timer-throttling'); } catch {}
+try { app.commandLine.appendSwitch('disable-renderer-backgrounding'); } catch {}
+try { app.commandLine.appendSwitch('no-first-run'); } catch {}
+try { app.commandLine.appendSwitch('no-default-browser-check'); } catch {}
+try { app.commandLine.appendSwitch('disable-extensions'); } catch {}
+try { app.commandLine.appendSwitch('disable-component-update'); } catch {}
+try { app.commandLine.appendSwitch('disable-default-apps'); } catch {}
+try { app.commandLine.appendSwitch('disable-popup-blocking'); } catch {}
+try { app.commandLine.appendSwitch('disable-hang-monitor'); } catch {}
+try { app.commandLine.appendSwitch('disable-translate'); } catch {}
+try { app.commandLine.appendSwitch('disable-sync'); } catch {}
 
 // 设置应用名称（影响托盘提示、通知等）
 try { app.setName('星堡移印仓储系统'); } catch {}
@@ -219,7 +238,7 @@ function createWindow() {
       // 生产环境下启动后 3 秒静默检查更新
       if (app.isPackaged) {
         setTimeout(() => {
-          try { updater.checkForUpdates(true); } catch {}
+          try { getUpdater().checkForUpdates(true); } catch {}
         }, 3000);
       }
     });

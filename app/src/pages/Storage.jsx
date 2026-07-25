@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { insertItem, uploadImage, fetchStaffList, addStaffMember, deleteStaffMember, seedDefaultStaff, subscribeToStaffList } from '../supabase';
+import { insertItem, uploadImage, fetchStaffList, addStaffMember, deleteStaffMember, seedDefaultStaff, subscribeToStaffList, fetchItems } from '../supabase';
 import SelectField from '../components/SelectField';
 import * as XLSX from 'xlsx';
 
@@ -96,10 +96,10 @@ function HistoryInput({ value, onChange, placeholder, fieldKey }) {
   }, []);
 
   return (
-    <div className="stg-field-input-wrap" ref={triggerRef} style={{ position: "relative" }}>
+    <div className="field-input-wrap" ref={triggerRef} style={{ position: "relative" }}>
       <input
         type="text"
-        className="stg-field-input"
+        className="field-input"
         value={value}
         onChange={e => onChange(e.target.value)}
         onFocus={() => history.length > 0 && setOpen(true)}
@@ -108,7 +108,7 @@ function HistoryInput({ value, onChange, placeholder, fieldKey }) {
       {history.length > 0 && (
         <button
           type="button"
-          className="stg-history-toggle"
+          className="history-toggle"
           onClick={() => setOpen(!open)}
           tabIndex={-1}
           title="历史记录"
@@ -117,7 +117,7 @@ function HistoryInput({ value, onChange, placeholder, fieldKey }) {
       {open && history.length > 0 && createPortal(
         <div
           ref={dropdownRef}
-          className="stg-history-dropdown stg-history-dropdown--portal"
+          className="history-dropdown stg-history-dropdown--portal"
           style={{
             position: "fixed",
             top: dropdownPos.top,
@@ -128,11 +128,11 @@ function HistoryInput({ value, onChange, placeholder, fieldKey }) {
           {history.map((h, hi) => (
             <div
               key={hi}
-              className="stg-history-item"
+              className="history-item"
               onMouseDown={() => { onChange(h); setOpen(false); }}
             >{h}</div>
           ))}
-          <div className="stg-history-clear" onMouseDown={() => { clearFieldHistory(fieldKey); setOpen(false); }}>
+          <div className="history-clear" onMouseDown={() => { clearFieldHistory(fieldKey); setOpen(false); }}>
             清除历史
           </div>
         </div>,
@@ -193,6 +193,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
   const [uploading, setUploading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [toast, setToast] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
   const [saveStatus, setSaveStatus] = useState(null); // 'success' | 'error' | null
   const [dragOver, setDragOver] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
@@ -352,11 +353,27 @@ export default function Storage({ onStatsChange, onBackHome }) {
       return;
     }
     setLoading(true);
+    const { data: existing } = await fetchItems({ shelf_number: form.shelf_number });
     const now = new Date().toISOString();
     const submitData = { ...form, created_at: now, updated_at: now };
     if (!submitData.image_url) delete submitData.image_url;
-    const { error } = await insertItem(submitData);
+    const isDuplicate = (existing || []).some(item =>
+      item.shelf_number === form.shelf_number && item.stamp_code === form.stamp_code
+    );
     setLoading(false);
+    if (isDuplicate) {
+      setConfirmModal({
+        title: '检测到重复记录',
+        message: '该货架号和移印编号已存在，确定要保存吗？',
+        onConfirm: () => doSave(submitData),
+      });
+      return;
+    }
+    doSave(submitData);
+  }
+
+  async function doSave(submitData) {
+    const { error } = await insertItem(submitData);
     if (!error) {
       TEXT_FIELDS.forEach(field => {
         if (field.hasHistory) addFieldHistory(field.key, form[field.key]);
@@ -387,41 +404,41 @@ export default function Storage({ onStatsChange, onBackHome }) {
   return (
     <>
       {toast && <div className={`stg-toast stg-toast--${toast.type}`}>{toast.msg}</div>}
-      <div className="stg-page">
+      <div className="page">
 
       {/* ===== Top Bar ===== */}
-      <div className="stg-topbar">
-        <button className="stg-btn-back" onClick={handleReset} title="返回首页">
+      <div className="topbar">
+        <button className="btn-back" onClick={handleReset} title="返回首页">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
           <span>返回首页</span>
         </button>
         <input ref={excelRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelImport} style={{ display: 'none' }} />
-        <button className="stg-btn-import" onClick={() => excelRef.current?.click()} disabled={importing}>
+        <button className="btn-import" onClick={() => excelRef.current?.click()} disabled={importing}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
           <span>{importing ? '导入中...' : '导入 Excel'}</span>
         </button>
       </div>
 
       {/* ===== Main Card ===== */}
-      <div className="stg-card">
+      <div className="card">
         {/* Header */}
-        <div className="stg-card-head">
-          <div className="stg-dots">
-            <span className="stg-dot stg-dot--cyan" />
-            <span className="stg-dot stg-dot--cyan" />
-            <span className="stg-dot stg-dot--purple" />
+        <div className="card-head">
+          <div className="dots">
+            <span className="dot stg-dot--cyan" />
+            <span className="dot stg-dot--cyan" />
+            <span className="dot stg-dot--purple" />
           </div>
-          <h1 className="stg-title">移印签板样品工单</h1>
-          <p className="stg-subtitle">请填写完整的样品信息</p>
+          <h1 className="title">移印签板样品工单</h1>
+          <p className="subtitle">请填写完整的样品信息</p>
         </div>
 
         {/* Form */}
-        <div className="stg-form">
+        <div className="form">
           {TEXT_FIELDS.map((field, i) => (
             <div key={field.key} className={`stg-field stg-field--${field.accent} stg-stagger`} style={{ animationDelay: `${0.08 + i * 0.05}s` }}>
-              <label className="stg-field-label">
+              <label className="field-label">
                 {field.label}
-                {field.required && <span className="stg-field-required">*</span>}
+                {field.required && <span className="field-required">*</span>}
               </label>
               {field.hasHistory ? (
                 <HistoryInput
@@ -431,10 +448,10 @@ export default function Storage({ onStatsChange, onBackHome }) {
                   fieldKey={field.key}
                 />
               ) : (
-                <div className="stg-field-input-wrap">
+                <div className="field-input-wrap">
                   <input
                     type="text"
-                    className="stg-field-input"
+                    className="field-input"
                     value={form[field.key]}
                     onChange={e => updateField(field.key, e.target.value)}
                     placeholder={field.placeholder}
@@ -445,7 +462,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
           ))}
 
           {/* 销售列 */}
-          <div className="stg-stagger" style={{ animationDelay: `${0.08 + 4 * 0.05}s` }}>
+          <div className="stagger" style={{ animationDelay: `${0.08 + 4 * 0.05}s` }}>
             <SelectField
               label="销售列"
               defaultOptions={DEFAULT_SALES}
@@ -461,7 +478,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
 
           {/* 仓储人员（带"管理人员"角标） */}
           <div
-            className="stg-stagger stg-field-with-badge"
+            className="stagger stg-field-with-badge"
             style={{ animationDelay: `${0.08 + 5 * 0.05}s` }}
           >
             <SelectField
@@ -474,7 +491,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
               accent="purple"
             />
             <span
-              className="stg-badge"
+              className="badge"
               onClick={(e) => { e.stopPropagation(); setShowStaffModal(true); }}
               title="管理人员"
             >
@@ -485,17 +502,17 @@ export default function Storage({ onStatsChange, onBackHome }) {
 
           {/* 上传图片 */}
           <div className={`stg-field stg-field--cyan stg-stagger`} style={{ animationDelay: `${0.08 + 6 * 0.05}s` }}>
-            <label className="stg-field-label">上传图片</label>
+            <label className="field-label">上传图片</label>
             <input ref={fileRef} type="file" accept="image/*" onChange={handleFilePick} style={{ display: 'none' }} />
             {form.image_url ? (
-              <div className="stg-upload-row">
-                <div className="stg-upload-preview">
-                  <img src={form.image_url} alt="样品预览" className="stg-upload-img" />
-                  <button type="button" className="stg-upload-remove" onClick={removeImage} title="移除图片">
+              <div className="upload-row">
+                <div className="upload-preview">
+                  <img src={form.image_url} alt="样品预览" className="upload-img" />
+                  <button type="button" className="upload-remove" onClick={removeImage} title="移除图片">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                   </button>
                 </div>
-                <button type="button" className="stg-upload-change" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                <button type="button" className="upload-change" onClick={() => fileRef.current?.click()} disabled={uploading}>
                   {uploading ? '⏳ 上传中...' : '📷 更换图片'}
                 </button>
               </div>
@@ -510,7 +527,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
                 disabled={uploading}
               >
                 {uploading ? (
-                  <><span className="stg-upload-spinner" />正在上传...</>
+                  <><span className="upload-spinner" />正在上传...</>
                 ) : (
                   <>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -526,15 +543,15 @@ export default function Storage({ onStatsChange, onBackHome }) {
           </div>
 
           {/* 底部按钮 */}
-          <div className="stg-actions">
-            <button className="stg-btn stg-btn--save" onClick={handleSave} disabled={loading}>
+          <div className="actions">
+            <button className="btn stg-btn--save" onClick={handleSave} disabled={loading}>
               {loading ? (
-                <><span className="stg-btn-spinner" />保存中...</>
+                <><span className="btn-spinner" />保存中...</>
               ) : (
                 <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>保存数据</span></>
               )}
             </button>
-            <button className="stg-btn stg-btn--reset" onClick={handleReset} disabled={loading}>
+            <button className="btn stg-btn--reset" onClick={handleReset} disabled={loading}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
               <span>重置工单</span>
             </button>
@@ -543,11 +560,19 @@ export default function Storage({ onStatsChange, onBackHome }) {
       </div>
 
       {/* Background decor */}
-      <div className="stg-bg-decor" aria-hidden="true">
-        <div className="stg-bg-grid" />
+      <div className="bg-decor" aria-hidden="true">
+        <div className="bg-grid" />
       </div>
 
       {/* ===== 人员管理弹窗 ===== */}
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
       {showStaffModal && (
         <StaffManagementModal
           list={staffList}
@@ -574,6 +599,23 @@ export default function Storage({ onStatsChange, onBackHome }) {
       )}
     </div>
     </>
+  );
+}
+
+
+// ===== Duplicate Confirmation Modal =====
+function ConfirmModal({ title, message, onConfirm, onCancel }) {
+  return (
+    <div className="stg-confirm-overlay" onClick={onCancel}>
+      <div className="stg-confirm-modal" onClick={e => e.stopPropagation()}>
+        <h3 className="stg-confirm-title">{title}</h3>
+        <p className="stg-confirm-message">{message}</p>
+        <div className="stg-confirm-actions">
+          <button className="stg-confirm-btn stg-confirm-btn--cancel" onClick={onCancel}>取消</button>
+          <button className="stg-confirm-btn stg-confirm-btn--confirm" onClick={onConfirm}>确认保存</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
