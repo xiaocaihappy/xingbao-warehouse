@@ -58,9 +58,35 @@ jobs:
         working-directory: app
         run: npx vite build
 
-      - name: Publish to GitHub Releases
+      - name: Build installer (without publishing yet)
         working-directory: app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-        run: npx electron-builder --win --publish always
+        run: npx electron-builder --win --publish never
+
+      - name: Generate update.json manifest
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          if (-not $version) { $version = "v${{ inputs.version }}" }
+          $version = $version -replace '^v', ''
+          $exePath = Get-ChildItem "app\release-build\*-Setup-*.exe" | Select-Object -First 1
+          if (-not $exePath) {
+            Write-Error "找不到安装包文件"
+            exit 1
+          }
+          Write-Host "生成 update.json: version=$version, exe=$($exePath.Name)"
+          node scripts/generateUpdateManifest.js $version $exePath.FullName
+
+      - name: Publish to GitHub Releases
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = "${{ github.ref_name }}"
+          if (-not $version) { $version = "v${{ inputs.version }}" }
+          npx electron-builder --win --publish always
+          # 上传 update.json 到同一个 Release
+          gh release upload $version ../app/release-build/update.json --clobber
+        shell: pwsh

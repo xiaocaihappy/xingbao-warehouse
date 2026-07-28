@@ -131,7 +131,14 @@ export default function UpdateNotifier({ api }) {
         </div>
       )}
 
-      {/* 重试中提示 */}
+      {/* 下载过程中的镜像切换/重试提示 */}
+      {status.event === 'progress' && status.message && (
+        <div className="update-error-hint" style={{ color: status.retry ? '#ffab40' : '#69b1ff' }}>
+          {status.message}
+        </div>
+      )}
+
+      {/* 检查更新重试提示 */}
       {status.event === 'checking' && status.retry > 0 && (
         <div className="update-error-hint" style={{ color: '#ffab40' }}>
           {status.message || `自动重试中: 第 ${status.retry + 1}/3 次...`}
