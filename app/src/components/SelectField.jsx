@@ -23,6 +23,8 @@ export default function SelectField({
   placeholder = '请选择',
   required = false,
   accent = 'blue',
+  externalTriggerRef,
+  onAfterSelect,
 }) {
   const [open, setOpen] = useState(false);
   const [internalOptions, setInternalOptions] = useState(defaultOptions);
@@ -98,6 +100,7 @@ export default function SelectField({
   function handleSelect(opt) {
     onChange(opt);
     setOpen(false);
+    onAfterSelect?.();
   }
 
   function handleAddNew() {
@@ -150,7 +153,7 @@ export default function SelectField({
       </label>
 
       <div
-        ref={triggerRef}
+        ref={(el) => { triggerRef.current = el; if (externalTriggerRef) externalTriggerRef.current = el; }}
         className={`select-field-trigger ${open ? 'select-field-open' : ''} ${value ? 'select-field-has-value' : ''}`}
         onClick={() => { setOpen(!open); setAdding(false); }}
         tabIndex={0}

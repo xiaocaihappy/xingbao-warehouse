@@ -52,7 +52,7 @@ function clearFieldHistory(fieldKey) {
 }
 
 // 带历史记录的下拉输入框组件（Portal 渲染，解决层级穿透问题）
-function HistoryInput({ value, onChange, placeholder, fieldKey }) {
+function HistoryInput({ value, onChange, placeholder, fieldKey, inputRef, onEnter }) {
   const [open, setOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const triggerRef = useRef(null);
@@ -96,19 +96,27 @@ function HistoryInput({ value, onChange, placeholder, fieldKey }) {
   }, []);
 
   return (
-    <div className="field-input-wrap" ref={triggerRef} style={{ position: "relative" }}>
+    <div className="stg-field-input-wrap" ref={triggerRef} style={{ position: "relative" }}>
       <input
         type="text"
-        className="field-input"
+        className="stg-field-input"
         value={value}
+        ref={inputRef}
         onChange={e => onChange(e.target.value)}
         onFocus={() => history.length > 0 && setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            setOpen(false);
+            onEnter?.();
+          }
+        }}
         placeholder={placeholder}
       />
       {history.length > 0 && (
         <button
           type="button"
-          className="history-toggle"
+          className="stg-history-toggle"
           onClick={() => setOpen(!open)}
           tabIndex={-1}
           title="历史记录"
@@ -117,7 +125,7 @@ function HistoryInput({ value, onChange, placeholder, fieldKey }) {
       {open && history.length > 0 && createPortal(
         <div
           ref={dropdownRef}
-          className="history-dropdown stg-history-dropdown--portal"
+          className="stg-history-dropdown stg-history-dropdown--portal"
           style={{
             position: "fixed",
             top: dropdownPos.top,
@@ -128,11 +136,11 @@ function HistoryInput({ value, onChange, placeholder, fieldKey }) {
           {history.map((h, hi) => (
             <div
               key={hi}
-              className="history-item"
+              className="stg-history-item"
               onMouseDown={() => { onChange(h); setOpen(false); }}
             >{h}</div>
           ))}
-          <div className="history-clear" onMouseDown={() => { clearFieldHistory(fieldKey); setOpen(false); }}>
+          <div className="stg-history-clear" onMouseDown={() => { clearFieldHistory(fieldKey); setOpen(false); }}>
             清除历史
           </div>
         </div>,
@@ -172,6 +180,17 @@ const TEXT_FIELDS = [
   { key: 'stamp_code', label: '移印编号', placeholder: '请输入移印编号', required: true, accent: 'cyan', hasHistory: true },
 ];
 
+// 全部参与"重复判定"与"Enter 跳转"的字段顺序（保持录入顺序）
+const FIELD_ORDER = ['shelf_number', 'grid_number', 'product_code', 'stamp_code', 'sales_channel', 'staff_name'];
+const FIELD_LABELS = {
+  shelf_number: '货架号（第几列）',
+  grid_number: '格子',
+  product_code: '货号',
+  stamp_code: '移印编号',
+  sales_channel: '销售列',
+  staff_name: '仓储人员',
+};
+
 export default function Storage({ onStatsChange, onBackHome }) {
   const [form, setForm] = useState(() => {
     const displayName = localStorage.getItem('xingbao_display_name')?.trim();
@@ -193,13 +212,25 @@ export default function Storage({ onStatsChange, onBackHome }) {
   const [uploading, setUploading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [toast, setToast] = useState(null);
-  const [confirmModal, setConfirmModal] = useState(null);
   const [saveStatus, setSaveStatus] = useState(null); // 'success' | 'error' | null
   const [dragOver, setDragOver] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
+  const [reviewModal, setReviewModal] = useState(null);
   const fileRef = useRef(null);
   const excelRef = useRef(null);
   const subRef = useRef(null);
+
+  // 字段引用（用于 Enter 键跳转焦点）
+  const fieldRefs = {
+    shelf_number: useRef(null),
+    grid_number: useRef(null),
+    product_code: useRef(null),
+    stamp_code: useRef(null),
+    sales_channel: useRef(null),
+    staff_name: useRef(null),
+  };
+  const dupTimer = useRef(null);
+  const lastDupSig = useRef('');
 
   // 初始化：首次填充默认人员 + 订阅实时变化
   useEffect(() => {
@@ -244,6 +275,27 @@ export default function Storage({ onStatsChange, onBackHome }) {
   // 从 Supabase 数据派生选项列表
   const staffOptions = useMemo(() => staffList.map(s => s.name), [staffList]);
 
+  // 全部字段填写完成后，自动检测数据库是否存在相同记录 → 弹窗审查
+  useEffect(() => {
+    const filled = FIELD_ORDER.every(k => (form[k] || '').toString().trim() !== '');
+    const sig = FIELD_ORDER.map(k => (form[k] || '').toString().trim().toLowerCase()).join('\u0001');
+    if (!filled) {
+      lastDupSig.current = '';
+      return;
+    }
+    if (sig === lastDupSig.current) return;
+    lastDupSig.current = sig;
+    if (dupTimer.current) clearTimeout(dupTimer.current);
+    dupTimer.current = setTimeout(async () => {
+      const existing = await findDuplicate();
+      if (existing) {
+        setReviewModal({ existing, onConfirm: () => doSave(buildSubmitData()) });
+      }
+    }, 450);
+    return () => { if (dupTimer.current) clearTimeout(dupTimer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.shelf_number, form.grid_number, form.product_code, form.stamp_code, form.sales_channel, form.staff_name]);
+
   // 同步销售选项到 localStorage
   function updateSalesOptions(next) {
     setSalesOptions(next);
@@ -253,6 +305,34 @@ export default function Storage({ onStatsChange, onBackHome }) {
 
   function updateField(key, value) {
     setForm(prev => ({ ...prev, [key]: value }));
+  }
+
+  function focusNextField(key) {
+    const idx = FIELD_ORDER.indexOf(key);
+    const next = FIELD_ORDER[idx + 1];
+    if (next && fieldRefs[next]?.current) {
+      fieldRefs[next].current.focus?.();
+    }
+  }
+
+  // 判断两条记录是否在全部关键字段上相同（忽略大小写与首尾空格）
+  function isSameRecord(a, b) {
+    return FIELD_ORDER.every(
+      k => (a[k] || '').toString().trim().toLowerCase() === (b[k] || '').toString().trim().toLowerCase()
+    );
+  }
+
+  function buildSubmitData() {
+    const now = new Date().toISOString();
+    const submitData = { ...form, created_at: now, updated_at: now };
+    if (!submitData.image_url) delete submitData.image_url;
+    return submitData;
+  }
+
+  async function findDuplicate() {
+    const { data } = await fetchItems({ shelf_number: form.shelf_number });
+    const list = (data || []).filter(item => isSameRecord(item, form));
+    return list[0] || null;
   }
 
   async function handleImageUpload(file) {
@@ -352,28 +432,18 @@ export default function Storage({ onStatsChange, onBackHome }) {
       showToast('请填写货架号（第几列）和移印编号', 'error');
       return;
     }
-    setLoading(true);
-    const { data: existing } = await fetchItems({ shelf_number: form.shelf_number });
-    const now = new Date().toISOString();
-    const submitData = { ...form, created_at: now, updated_at: now };
-    if (!submitData.image_url) delete submitData.image_url;
-    const isDuplicate = (existing || []).some(item =>
-      item.shelf_number === form.shelf_number && item.stamp_code === form.stamp_code
-    );
-    setLoading(false);
-    if (isDuplicate) {
-      setConfirmModal({
-        title: '检测到重复记录',
-        message: '该货架号和移印编号已存在，确定要保存吗？',
-        onConfirm: () => doSave(submitData),
-      });
+    const existing = await findDuplicate();
+    if (existing) {
+      setReviewModal({ existing, onConfirm: () => doSave(buildSubmitData()) });
       return;
     }
-    doSave(submitData);
+    doSave(buildSubmitData());
   }
 
   async function doSave(submitData) {
+    setLoading(true);
     const { error } = await insertItem(submitData);
+    setLoading(false);
     if (!error) {
       TEXT_FIELDS.forEach(field => {
         if (field.hasHistory) addFieldHistory(field.key, form[field.key]);
@@ -404,41 +474,41 @@ export default function Storage({ onStatsChange, onBackHome }) {
   return (
     <>
       {toast && <div className={`stg-toast stg-toast--${toast.type}`}>{toast.msg}</div>}
-      <div className="page">
+      <div className="stg-page">
 
       {/* ===== Top Bar ===== */}
-      <div className="topbar">
-        <button className="btn-back" onClick={handleReset} title="返回首页">
+      <div className="stg-topbar">
+        <button className="stg-btn-back" onClick={handleReset} title="返回首页">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
           <span>返回首页</span>
         </button>
         <input ref={excelRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelImport} style={{ display: 'none' }} />
-        <button className="btn-import" onClick={() => excelRef.current?.click()} disabled={importing}>
+        <button className="stg-btn-import" onClick={() => excelRef.current?.click()} disabled={importing}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
           <span>{importing ? '导入中...' : '导入 Excel'}</span>
         </button>
       </div>
 
       {/* ===== Main Card ===== */}
-      <div className="card">
+      <div className="stg-card">
         {/* Header */}
-        <div className="card-head">
-          <div className="dots">
-            <span className="dot stg-dot--cyan" />
-            <span className="dot stg-dot--cyan" />
-            <span className="dot stg-dot--purple" />
+        <div className="stg-card-head">
+          <div className="stg-dots">
+            <span className="stg-dot stg-dot--cyan" />
+            <span className="stg-dot stg-dot--cyan" />
+            <span className="stg-dot stg-dot--purple" />
           </div>
-          <h1 className="title">移印签板样品工单</h1>
-          <p className="subtitle">请填写完整的样品信息</p>
+          <h1 className="stg-title">移印签板样品工单</h1>
+          <p className="stg-subtitle">请填写完整的样品信息</p>
         </div>
 
         {/* Form */}
-        <div className="form">
+        <div className="stg-form">
           {TEXT_FIELDS.map((field, i) => (
             <div key={field.key} className={`stg-field stg-field--${field.accent} stg-stagger`} style={{ animationDelay: `${0.08 + i * 0.05}s` }}>
-              <label className="field-label">
+              <label className="stg-field-label">
                 {field.label}
-                {field.required && <span className="field-required">*</span>}
+                {field.required && <span className="stg-field-required">*</span>}
               </label>
               {field.hasHistory ? (
                 <HistoryInput
@@ -446,14 +516,23 @@ export default function Storage({ onStatsChange, onBackHome }) {
                   onChange={v => updateField(field.key, v)}
                   placeholder={field.placeholder}
                   fieldKey={field.key}
+                  inputRef={fieldRefs[field.key]}
+                  onEnter={() => focusNextField(field.key)}
                 />
               ) : (
-                <div className="field-input-wrap">
+                <div className="stg-field-input-wrap">
                   <input
                     type="text"
-                    className="field-input"
+                    className="stg-field-input"
                     value={form[field.key]}
+                    ref={fieldRefs[field.key]}
                     onChange={e => updateField(field.key, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        focusNextField(field.key);
+                      }
+                    }}
                     placeholder={field.placeholder}
                   />
                 </div>
@@ -462,7 +541,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
           ))}
 
           {/* 销售列 */}
-          <div className="stagger" style={{ animationDelay: `${0.08 + 4 * 0.05}s` }}>
+          <div className="stg-stagger" style={{ animationDelay: `${0.08 + 4 * 0.05}s` }}>
             <SelectField
               label="销售列"
               defaultOptions={DEFAULT_SALES}
@@ -473,12 +552,14 @@ export default function Storage({ onStatsChange, onBackHome }) {
               placeholder="请选择销售"
               required
               accent="cyan"
+              externalTriggerRef={fieldRefs.sales_channel}
+              onAfterSelect={() => focusNextField('sales_channel')}
             />
           </div>
 
           {/* 仓储人员（带"管理人员"角标） */}
           <div
-            className="stagger stg-field-with-badge"
+            className="stg-stagger stg-field-with-badge"
             style={{ animationDelay: `${0.08 + 5 * 0.05}s` }}
           >
             <SelectField
@@ -489,9 +570,10 @@ export default function Storage({ onStatsChange, onBackHome }) {
               placeholder={staffLoading ? '加载中...' : '请选择仓储人员'}
               required
               accent="purple"
+              externalTriggerRef={fieldRefs.staff_name}
             />
             <span
-              className="badge"
+              className="stg-badge"
               onClick={(e) => { e.stopPropagation(); setShowStaffModal(true); }}
               title="管理人员"
             >
@@ -502,17 +584,17 @@ export default function Storage({ onStatsChange, onBackHome }) {
 
           {/* 上传图片 */}
           <div className={`stg-field stg-field--cyan stg-stagger`} style={{ animationDelay: `${0.08 + 6 * 0.05}s` }}>
-            <label className="field-label">上传图片</label>
+            <label className="stg-field-label">上传图片</label>
             <input ref={fileRef} type="file" accept="image/*" onChange={handleFilePick} style={{ display: 'none' }} />
             {form.image_url ? (
-              <div className="upload-row">
-                <div className="upload-preview">
-                  <img src={form.image_url} alt="样品预览" className="upload-img" />
-                  <button type="button" className="upload-remove" onClick={removeImage} title="移除图片">
+              <div className="stg-upload-row">
+                <div className="stg-upload-preview">
+                  <img src={form.image_url} alt="样品预览" className="stg-upload-img" />
+                  <button type="button" className="stg-upload-remove" onClick={removeImage} title="移除图片">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                   </button>
                 </div>
-                <button type="button" className="upload-change" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                <button type="button" className="stg-upload-change" onClick={() => fileRef.current?.click()} disabled={uploading}>
                   {uploading ? '⏳ 上传中...' : '📷 更换图片'}
                 </button>
               </div>
@@ -527,7 +609,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
                 disabled={uploading}
               >
                 {uploading ? (
-                  <><span className="upload-spinner" />正在上传...</>
+                  <><span className="stg-upload-spinner" />正在上传...</>
                 ) : (
                   <>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -543,15 +625,15 @@ export default function Storage({ onStatsChange, onBackHome }) {
           </div>
 
           {/* 底部按钮 */}
-          <div className="actions">
-            <button className="btn stg-btn--save" onClick={handleSave} disabled={loading}>
+          <div className="stg-actions">
+            <button className="stg-btn stg-btn--save" onClick={handleSave} disabled={loading}>
               {loading ? (
-                <><span className="btn-spinner" />保存中...</>
+                <><span className="stg-btn-spinner" />保存中...</>
               ) : (
                 <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>保存数据</span></>
               )}
             </button>
-            <button className="btn stg-btn--reset" onClick={handleReset} disabled={loading}>
+            <button className="stg-btn stg-btn--reset" onClick={handleReset} disabled={loading}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
               <span>重置工单</span>
             </button>
@@ -560,19 +642,21 @@ export default function Storage({ onStatsChange, onBackHome }) {
       </div>
 
       {/* Background decor */}
-      <div className="bg-decor" aria-hidden="true">
-        <div className="bg-grid" />
+      <div className="stg-bg-decor" aria-hidden="true">
+        <div className="stg-bg-grid" />
       </div>
 
-      {/* ===== 人员管理弹窗 ===== */}
-      {confirmModal && (
-        <ConfirmModal
-          title={confirmModal.title}
-          message={confirmModal.message}
-          onConfirm={confirmModal.onConfirm}
-          onCancel={() => setConfirmModal(null)}
+      {/* ===== 重复记录审查弹窗 ===== */}
+      {reviewModal && (
+        <ReviewModal
+          existing={reviewModal.existing}
+          form={form}
+          onConfirm={reviewModal.onConfirm}
+          onCancel={() => setReviewModal(null)}
         />
       )}
+
+      {/* ===== 人员管理弹窗 ===== */}
       {showStaffModal && (
         <StaffManagementModal
           list={staffList}
@@ -602,16 +686,40 @@ export default function Storage({ onStatsChange, onBackHome }) {
   );
 }
 
-
-// ===== Duplicate Confirmation Modal =====
-function ConfirmModal({ title, message, onConfirm, onCancel }) {
+// ===== 重复记录审查弹窗（展示数据库已有值 vs 当前输入对比） =====
+function ReviewModal({ existing, form, onConfirm, onCancel }) {
+  const rows = FIELD_ORDER.map(key => {
+    const inputVal = (form[key] || '').toString();
+    const dbVal = (existing[key] || '').toString();
+    const differ = inputVal.trim().toLowerCase() !== dbVal.trim().toLowerCase();
+    return { key, label: FIELD_LABELS[key], inputVal, dbVal, differ };
+  });
+  const allSame = rows.every(r => !r.differ);
   return (
     <div className="stg-confirm-overlay" onClick={onCancel}>
-      <div className="stg-confirm-modal" onClick={e => e.stopPropagation()}>
-        <h3 className="stg-confirm-title">{title}</h3>
-        <p className="stg-confirm-message">{message}</p>
+      <div className="stg-confirm-modal stg-review-modal" onClick={e => e.stopPropagation()}>
+        <h3 className="stg-confirm-title">
+          {allSame ? '检测到完全相同的记录' : '数据库中存在相似记录，请审查'}
+        </h3>
+        <p className="stg-confirm-message">
+          以下为「您当前输入」与「数据库已有记录」的逐项对比，请确认后再保存。
+        </p>
+        <div className="stg-review-table">
+          <div className="stg-review-head">
+            <div className="stg-review-col">字段</div>
+            <div className="stg-review-col">您当前输入</div>
+            <div className="stg-review-col">数据库已有</div>
+          </div>
+          {rows.map(r => (
+            <div key={r.key} className={`stg-review-row ${r.differ ? 'stg-review-row--diff' : ''}`}>
+              <div className="stg-review-col stg-review-label">{r.label}</div>
+              <div className="stg-review-col">{r.inputVal || <span className="stg-review-empty">（空）</span>}</div>
+              <div className="stg-review-col">{r.dbVal || <span className="stg-review-empty">（空）</span>}</div>
+            </div>
+          ))}
+        </div>
         <div className="stg-confirm-actions">
-          <button className="stg-confirm-btn stg-confirm-btn--cancel" onClick={onCancel}>取消</button>
+          <button className="stg-confirm-btn stg-confirm-btn--cancel" onClick={onCancel}>返回修改</button>
           <button className="stg-confirm-btn stg-confirm-btn--confirm" onClick={onConfirm}>确认保存</button>
         </div>
       </div>

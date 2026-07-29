@@ -3583,3 +3583,71 @@ body.theme-light {
 .theme-light .stg-confirm-btn--confirm {
   background: linear-gradient(135deg, #f59e0b, #d97706);
 }
+
+/* ===== 重复记录审查弹窗表格 ===== */
+.stg-review-modal {
+  max-width: 560px;
+}
+.stg-review-table {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.stg-review-head,
+.stg-review-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 8px;
+}
+.stg-review-head {
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  font-weight: 700;
+  color: hsl(215, 15%, 70%);
+  text-transform: none;
+}
+.stg-review-head .stg-review-col {
+  padding: 10px 12px;
+}
+.stg-review-row {
+  font-size: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: hsl(215, 15%, 85%);
+}
+.stg-review-row--diff {
+  background: rgba(245, 158, 11, 0.12);
+}
+.stg-review-row--diff .stg-review-label::after {
+  content: " *";
+  color: #f59e0b;
+}
+.stg-review-col {
+  padding: 10px 12px;
+  word-break: break-all;
+}
+.stg-review-label {
+  font-weight: 600;
+  color: hsl(215, 15%, 70%);
+}
+.stg-review-empty {
+  opacity: 0.5;
+  font-style: italic;
+}
+.theme-light .stg-review-table {
+  border-color: rgba(0, 0, 0, 0.12);
+}
+.theme-light .stg-review-head {
+  background: #f1f5f9;
+  color: #475569;
+}
+.theme-light .stg-review-row {
+  border-top-color: rgba(0, 0, 0, 0.08);
+  color: #1e293b;
+}
+.theme-light .stg-review-row--diff {
+  background: rgba(245, 158, 11, 0.14);
+}
+.theme-light .stg-review-label {
+  color: #475569;
+}
