@@ -20,7 +20,7 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import ImageEditor from '../components/ImageEditor';
 import { useImageUploader } from '../utils/useImageUploader';
-import { compressImage } from '../utils/imageUtils';
+import { compressImage, urlToBlob } from '../utils/imageUtils';
 
 const PAGE_SIZE = 12;
 
@@ -38,6 +38,7 @@ export default function Query({ onStatsChange }) {
   const [selectAll, setSelectAll] = useState(false);
   const [editModal, setEditModal] = useState(null);
   const [editorFile, setEditorFile] = useState(null);
+  const [editDragOver, setEditDragOver] = useState(false);
   const uploader = useImageUploader(showToast);
   const [toast, setToast] = useState(null);
   const [expandedImage, setExpandedImage] = useState(null);
@@ -251,7 +252,7 @@ export default function Query({ onStatsChange }) {
     const url = await uploader.awaitPending();
     updates.image_url = url || editModal.image_url;
     const { error: err } = await updateItem(id, updates);
-    if (!err) { showToast('更新成功', 'success'); setEditModal(null); loadItems(filtersRef.current, pageRef.current); onStatsChange?.(); }
+    if (!err) { showToast('更新成功', 'success'); closeEditModal(); loadItems(filtersRef.current, pageRef.current); onStatsChange?.(); }
     else { showToast('更新失败: ' + err.message, 'error'); }
   }
 
@@ -269,7 +270,37 @@ export default function Query({ onStatsChange }) {
   function handleEditDrop(e) {
     e.preventDefault();
     e.stopPropagation();
+    setEditDragOver(false);
     openEditorWithFile(e.dataTransfer?.files?.[0]);
+  }
+  function handleEditDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditDragOver(true);
+  }
+  function handleEditDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditDragOver(false);
+  }
+  // 编辑当前已有图片：下载为 Blob 后打开编辑器
+  async function openExistingImageEditor() {
+    const url = uploader.localPreview || editModal?.image_url;
+    if (!url || url === 'EMPTY') return;
+    try {
+      const blob = await urlToBlob(url);
+      setEditorFile(blob);
+    } catch {
+      showToast('无法加载当前图片进行编辑，请尝试更换图片', 'error');
+    }
+  }
+  function openEditModal(item) {
+    uploader.clear();
+    setEditModal(item);
+  }
+  function closeEditModal() {
+    uploader.clear();
+    setEditModal(null);
   }
   // 编辑器确认：拿到裁剪+旋转后的 Blob → 后台异步上传
   function handleEditorApply(blob) {
@@ -497,7 +528,7 @@ export default function Query({ onStatsChange }) {
                       <td>{item.staff_name || '-'}</td>
                       <td className="cell-time">{item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : '-'}</td>
                       <td>
-                        <button className="btn btn-outline btn-xs" onClick={() => setEditModal(item)}>编辑</button>
+                        <button className="btn btn-outline btn-xs" onClick={() => openEditModal(item)}>编辑</button>
                         <button className="btn btn-ghost-danger btn-xs" onClick={() => handleDelete(item.id)}>删除</button>
                       </td>
                     </tr>
@@ -540,7 +571,7 @@ export default function Query({ onStatsChange }) {
 
       {/* 编辑弹窗 */}
       {editModal && (
-        <div className="modal-overlay" onClick={() => setEditModal(null)}>
+        <div className="modal-overlay" onClick={closeEditModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>编辑样品信息</h2>
             <div className="modal-form-grid">
@@ -580,16 +611,30 @@ export default function Query({ onStatsChange }) {
               </div>
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                 <label>样品图片</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    borderRadius: 8,
+                    boxShadow: editDragOver ? 'inset 0 0 0 2px #00e5c0' : 'none',
+                    transition: 'box-shadow 0.15s ease',
+                  }}
+                  onDrop={handleEditDrop}
+                  onDragOver={handleEditDragOver}
+                  onDragLeave={handleEditDragLeave}
+                  title="可拖拽图片到此处上传或替换"
+                >
                   {(editModal.image_url && editModal.image_url !== 'EMPTY') || uploader.localPreview ? (
-                    <div
-                      style={{ position: 'relative', display: 'inline-block' }}
-                      onDrop={handleEditDrop}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                      title="可拖拽新图片到此替换"
-                    >
-                      <img src={uploader.localPreview || editModal.image_url} alt="预览" className="upload-preview-img" style={{ maxWidth: 120, maxHeight: 120 }} />
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <img
+                        src={uploader.localPreview || editModal.image_url}
+                        alt="预览"
+                        className="upload-preview-img"
+                        style={{ maxWidth: 120, maxHeight: 120, cursor: 'pointer' }}
+                        onClick={openExistingImageEditor}
+                        title="点击编辑图片（裁切/旋转）"
+                      />
                       {uploader.uploading && <div className="stg-upload-loading-badge">⏳ 上传中</div>}
                       <button
                         type="button"
@@ -603,12 +648,17 @@ export default function Query({ onStatsChange }) {
                     {uploader.uploading ? '⏳ 上传中...' : (editModal.image_url && editModal.image_url !== 'EMPTY' ? '更换图片' : '添加图片')}
                     <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
                   </label>
+                  {(editModal.image_url && editModal.image_url !== 'EMPTY') && !uploader.localPreview && (
+                    <button type="button" className="btn btn-outline btn-sm" onClick={openExistingImageEditor}>
+                      编辑图片
+                    </button>
+                  )}
                   {uploader.uploading && <span className="stg-upload-hint">图片后台上传中，保存时会自动等待完成</span>}
                 </div>
               </div>
             </div>
             <div className="modal-actions">
-              <button className="btn btn-outline" onClick={() => setEditModal(null)}>取消</button>
+              <button className="btn btn-outline" onClick={closeEditModal}>取消</button>
               <button className="btn btn-primary-glow" onClick={handleEdit}>保存修改</button>
             </div>
           </div>

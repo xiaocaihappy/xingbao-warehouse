@@ -5,10 +5,16 @@ export function fileToImage(fileOrBlob) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(fileOrBlob);
     const img = new Image();
-    img.onload = () => { resolve(img); };
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
     img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
     img.src = url;
   });
+}
+
+export async function urlToBlob(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch image failed: ${res.status}`);
+  return await res.blob();
 }
 
 function canvasToBlob(canvas, type = 'image/jpeg', quality = 0.9) {

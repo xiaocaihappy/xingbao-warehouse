@@ -17,7 +17,7 @@
 - **`NODE_OPTIONS=""` 必须直接挂在 node 调用上**（npm / electron-builder 各自前缀），不要包在 `bash -c '...'` 外层——工具的 shell 会单独给 node 注入 shim，外层前缀透传不到 vite 子进程。
 - 必须加 `NODE_OPTIONS=""`：本机注入 safe-delete shim，会把 `fs.rm` 改去回收站，导致 vite 清 `dist`、electron-builder 删临时文件报错（fail-closed 直接中断构建）。
 - ⚠️ **中断的打包会留锁目录**：`release-build/win-unpacked.tmp.lock`（proper-lockfile 用 mkdir 原子锁，是**目录**不是文件）。下次打包报 "Lock file is already being held" 时，用 `rm -rf release-build/win-unpacked.tmp.lock release-build/win-unpacked` 清掉再打。`rm -f` 删不了目录锁。
-- 版本号在 `app/package.json` 的 `version` 字段，每次发布 +1（如 1.1.25）。
+- ⚠️ **版本号规则（用户 2026-07-30 明确）**：`app/package.json` 的 `version` 字段，**只有在真正发布/打包给用户当正式版时才 +1**；平时改代码、出测试包都**不要递增版本号**，沿用当前版本反复测（如 1.1.27 作为当前测试版反复迭代，直到用户说"发布"才升 1.1.28）。
 
 ## 功能要点（当前代码已实现）
 - 存储表单：回车跳下一输入框；全部 6 字段（货架号/格子/货号/移印编号/销售列/仓储人员）填完自动查重，命中相同记录弹审查弹窗（对比输入值 vs 数据库值，可返回修改或确认保存）。

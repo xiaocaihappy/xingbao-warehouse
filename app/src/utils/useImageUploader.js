@@ -49,6 +49,7 @@ export function useImageUploader(showToast) {
   }
 
   function clear() {
+    if (localPreview) URL.revokeObjectURL(localPreview);
     tokenRef.current++; // 作废在途上传
     urlRef.current = null;
     pendingRef.current = null;
