@@ -36,9 +36,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Excel 导出（含嵌入图片）→ 主进程生成 .xlsx
   exportExcel: (items) => ipcRenderer.invoke('excel:export', items),
 
-  // 保存主题（供开屏窗口读取）
-  saveTheme: (data) => ipcRenderer.invoke('theme:save', data),
-
   // ===== 窗口关闭 API =====
   // 监听主进程的关闭请求
   onCloseRequest: (callback) => {

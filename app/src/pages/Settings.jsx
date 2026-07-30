@@ -58,10 +58,6 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
       document.body.className = 'theme-dark';
     }
 
-    // 同步到 splash 窗口使用的文件
-    if (window.electronAPI?.saveTheme) {
-      window.electronAPI.saveTheme({ theme: themeId, isLight }).catch(() => {});
-    }
   };
 
   function applyPreset(themeId) {
@@ -250,7 +246,7 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
         <div className="settings-card-icon">🎨</div>
         <div className="settings-card-body">
           <h3>主题颜色</h3>
-          <p className="settings-card-desc">选择深色或浅色主题，开屏页将自动跟随</p>
+          <p className="settings-card-desc">选择深色或浅色主题</p>
           <div className="theme-grid">
             {THEME_PRESETS.map(preset => (
               <button

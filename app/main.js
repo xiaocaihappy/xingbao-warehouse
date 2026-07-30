@@ -94,7 +94,6 @@ if (!gotLock) {
 }
 
 let mainWindow = null;
-let splashWindow = null;
 let tray = null;
 let isQuiting = false;
 let closeTimeout = null;
@@ -102,62 +101,6 @@ let closeClickCount = 0;
 const CLOSE_TIMEOUT_MS = 1500;
 const DOUBLE_CLICK_MS = 800;
 let lastCloseClickTime = 0;
-
-// 主题文件路径（用于 splash 窗口读取）
-const THEME_FILE = path.join(app.getPath('userData'), 'theme.json');
-
-// 读取已保存的主题
-function readSavedTheme() {
-  try {
-    if (fs.existsSync(THEME_FILE)) {
-      return JSON.parse(fs.readFileSync(THEME_FILE, 'utf-8'));
-    }
-  } catch {}
-  return { theme: 'dark', isLight: false };
-}
-
-function createSplashWindow() {
-  try {
-    const splashPath = path.join(__dirname, 'splash.html');
-    writeStartupLog('SPLASH_CREATE', `loading ${splashPath}`);
-
-    const themeData = readSavedTheme();
-    const themeQuery = `?theme=${themeData.theme}&light=${themeData.isLight ? 1 : 0}`;
-
-    splashWindow = new BrowserWindow({
-      width: 460,
-      height: 380,
-      frame: false,
-      transparent: false,
-      resizable: false,
-      center: true,
-      show: true,
-      backgroundColor: themeData.isLight ? '#f5f8fb' : '#0f131a',
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-      },
-      skipTaskbar: true,
-    });
-
-    splashWindow.loadFile(splashPath, { query: { theme: themeData.theme, light: themeData.isLight ? '1' : '0' } }).catch((err) => {
-      writeCrashLog('SPLASH_LOAD_FAIL', err);
-      console.error('[Splash] loadFile failed:', err.message);
-    });
-
-    splashWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-      writeCrashLog('SPLASH_FAIL_LOAD', new Error(`Code=${errorCode} ${errorDescription}`));
-    });
-
-    splashWindow.on('closed', () => {
-      splashWindow = null;
-    });
-  } catch (err) {
-    writeCrashLog('SPLASH_CREATE_FAIL', err);
-    console.error('[Splash] createSplashWindow failed:', err.message);
-  }
-}
 
 function createWindow() {
   try {
@@ -227,12 +170,7 @@ function createWindow() {
     });
 
     mainWindow.once('ready-to-show', () => {
-      writeStartupLog('MAIN_WINDOW_READY', 'closing splash');
-      // 关闭启动画面
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.close();
-      }
-
+      writeStartupLog('MAIN_WINDOW_READY', 'show');
       mainWindow.show();
 
       // 生产环境下启动后 3 秒静默检查更新
@@ -251,12 +189,6 @@ function createWindow() {
         console.error('[MainWindow] loadURL failed:', err.message);
       });
       mainWindow.webContents.openDevTools();
-      // 开发环境直接关闭 splash
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        setTimeout(() => {
-          if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
-        }, 800);
-      }
     } else {
       const distPath = path.join(__dirname, 'dist', 'index.html');
       writeStartupLog('MAIN_LOAD_FILE', distPath);
@@ -507,10 +439,8 @@ app.on('render-process-gone', (_event, webContents, details) => {
 // ===== App 生命周期 =====
 app.whenReady().then(() => {
   writeStartupLog('APP_READY', 'begin');
-  // 先显示启动画面
-  createSplashWindow();
 
-  // 微延迟后再创建主窗口（让启动画面先渲染）
+  // 创建主窗口
   setImmediate(() => {
     try {
       writeStartupLog('SET_IMMEDIATE', 'begin');
@@ -553,16 +483,6 @@ app.whenReady().then(() => {
           return { success: true, buffer: result };
         } catch (e) {
           console.error('[Excel] 导出失败:', e.message);
-          return { success: false, error: e.message };
-        }
-      });
-
-      // 保存主题到文件（供 splash 窗口启动时读取）
-      ipcMain.handle('theme:save', (_event, data) => {
-        try {
-          fs.writeFileSync(THEME_FILE, JSON.stringify(data), 'utf-8');
-          return { success: true };
-        } catch (e) {
           return { success: false, error: e.message };
         }
       });

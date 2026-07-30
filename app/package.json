@@ -43,7 +43,6 @@
       "preload.js",
       "updater.js",
       "resilientDownloader.js",
-      "splash.html",
       "tubiao.ico",
       "XBlogo.png",
       "dist/**/*",

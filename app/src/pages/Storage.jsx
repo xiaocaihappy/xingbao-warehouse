@@ -1,11 +1,12 @@
 import { useState, useRef, useMemo, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { insertItem, fetchStaffList, addStaffMember, deleteStaffMember, seedDefaultStaff, subscribeToStaffList, fetchItems } from '../supabase';
+import { insertItem, fetchStaffList, addStaffMember, deleteStaffMember, seedDefaultStaff, subscribeToStaffList, fetchItems, uploadImage } from '../supabase';
 import SelectField from '../components/SelectField';
 import ImageEditor from '../components/ImageEditor';
 import { useImageUploader } from '../utils/useImageUploader';
 import { compressImage } from '../utils/imageUtils';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 
 // 切页时的输入草稿（模块级，组件卸载后保留，重挂载时恢复）
 let storageFormDraft = null;
@@ -422,7 +423,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
     setDragOver(false);
   }
 
-  // Excel 导入
+  // Excel 导入（按模板列名映射，并同步上传内嵌图片到数据库）
   async function handleExcelImport(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -437,35 +438,133 @@ export default function Storage({ onStatsChange, onBackHome }) {
       const workbook = XLSX.read(buffer, { type: 'array' });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-      if (!rows || rows.length === 0) { showToast('Excel 文件中无数据', 'error'); return; }
+      const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+      if (!matrix || matrix.length < 2) { showToast('Excel 文件中无数据行', 'error'); return; }
+
+      // 按模板表头定位各字段列（兼容别名与列顺序变化）
+      const headers = (matrix[0] || []).map((h) => String(h).trim());
+      const colIndex = (names) => {
+        for (const n of names) {
+          const i = headers.indexOf(n);
+          if (i >= 0) return i;
+        }
+        return -1;
+      };
+      const idx = {
+        shelf: colIndex(['货架号', '货架编号', '货架号（第几列）', 'shelf_number']),
+        grid: colIndex(['格子', '网格号', '格子号', 'grid_number']),
+        product: colIndex(['货号', '产品货号', '产品编码', 'product_code']),
+        stamp: colIndex(['移印编号', '印章编号', 'stamp_code']),
+        channel: colIndex(['销售列', '销售', '销售渠道', 'sales_channel']),
+        staff: colIndex(['仓储人员', '人员', '人员姓名', 'staff_name']),
+        image: colIndex(['图片', '样品图片', 'image_url', 'image']),
+        time: colIndex(['创建时间', '时间', 'created_at']),
+      };
+
+      // 提取 Excel 内嵌图片（按行号关联）
+      const imagesByRow = await extractEmbeddedImages(buffer);
+
       const now = new Date().toISOString();
-      let successCount = 0, failCount = 0;
-      for (const row of rows) {
+      let successCount = 0, failCount = 0, imgOk = 0, imgFail = 0;
+      for (let i = 1; i < matrix.length; i++) {
+        const row = matrix[i];
+        if (row.every((c) => !String(c).trim())) continue; // 跳过全空行
+        const get = (k) => (idx[k] >= 0 ? String(row[idx[k]] || '').trim() : '');
         const item = {
-          shelf_number: String(row['货架号'] || row['shelf_number'] || row['货架编号'] || row['货架号（第几列）'] || '').trim(),
-          stamp_code: String(row['移印编号'] || row['stamp_code'] || row['印章编号'] || '').trim(),
-          sales_channel: String(row['销售列'] || row['销售'] || row['sales_channel'] || row['销售渠道'] || '').trim(),
-          staff_name: String(row['仓储人员'] || row['人员'] || row['staff_name'] || row['人员姓名'] || '').trim(),
-          grid_number: String(row['格子'] || row['grid_number'] || row['网格号'] || '').trim(),
-          product_code: String(row['货号'] || row['产品货号'] || row['product_code'] || row['产品编码'] || '').trim(),
-          image_url: String(row['图片链接'] || row['image_url'] || '').trim(),
-          created_at: now, updated_at: now,
+          shelf_number: get('shelf'),
+          grid_number: get('grid'),
+          product_code: get('product'),
+          stamp_code: get('stamp'),
+          sales_channel: get('channel'),
+          staff_name: get('staff'),
+          created_at: get('time') || now,
+          updated_at: now,
         };
         if (!item.shelf_number && !item.stamp_code) continue;
         if (!item.shelf_number || !item.stamp_code) { failCount++; continue; }
-        Object.keys(item).forEach(k => { if (item[k] === '' || item[k] === undefined) delete item[k]; });
+
+        // 图片：优先内嵌图片上传到 Supabase，否则取图片列中的 http(s) 链接
+        let image_url = '';
+        const emb = imagesByRow.get(i);
+        if (emb) {
+          try {
+            const mime = emb.ext === 'jpg' || emb.ext === 'jpeg' ? 'jpeg' : emb.ext;
+            const blob = new Blob([emb.data], { type: `image/${mime}` });
+            const f = new File([blob], `excel_${Date.now()}_${i}.${emb.ext}`, { type: `image/${mime}` });
+            const { data: url, error } = await uploadImage(f);
+            if (url) { image_url = url; imgOk++; }
+            else { imgFail++; }
+          } catch { imgFail++; }
+        } else {
+          const txt = get('image');
+          if (/^https?:\/\//i.test(txt)) image_url = txt;
+        }
+        if (image_url) item.image_url = image_url;
+
+        Object.keys(item).forEach((k) => { if (item[k] === '' || item[k] === undefined) delete item[k]; });
         const { error } = await insertItem(item);
         error ? failCount++ : successCount++;
       }
-      showToast(`导入完成：成功 ${successCount} 条，失败 ${failCount} 条（共 ${rows.length} 条）`, failCount > 0 ? 'error' : 'success');
+
+      let msg = `导入完成：成功 ${successCount} 条，失败 ${failCount} 条（共 ${matrix.length - 1} 行）`;
+      if (imgOk || imgFail) msg += `；图片上传 ${imgOk} 张成功，${imgFail} 张失败`;
+      showToast(msg, failCount > 0 || imgFail > 0 ? 'error' : 'success');
       onStatsChange?.();
-    } catch (e) {
-      showToast('Excel 解析失败: ' + (e.message || '未知错误'), 'error');
+    } catch (err) {
+      showToast('Excel 解析失败: ' + (err.message || '未知错误'), 'error');
     } finally {
       setImporting(false);
       e.target.value = '';
     }
+  }
+
+  // 从 xlsx 二进制中提取内嵌图片，返回 Map<0-based 行号, {data:Uint8Array, ext}>
+  async function extractEmbeddedImages(buffer) {
+    const map = new Map();
+    try {
+      const zip = await JSZip.loadAsync(buffer);
+      const drawingNames = Object.keys(zip.files).filter((n) => /^xl\/drawings\/drawing\d+\.xml$/.test(n));
+      for (const dn of drawingNames) {
+        const xml = await zip.file(dn).async('string');
+        const relsName = dn.replace(/drawing(\d+)\.xml$/, '_rels/drawing$1.xml.rels');
+        const relsFile = zip.file(relsName);
+        const relMap = {};
+        if (relsFile) {
+          const rels = await relsFile.async('string');
+          const relRe = /Id="([^"]+)"[^>]*Target="([^"]+)"/g;
+          let rm;
+          while ((rm = relRe.exec(rels)) !== null) relMap[rm[1]] = rm[2];
+        }
+        const anchorRe = /<xdr:(?:oneCellAnchor|twoCellAnchor)\b[^>]*>([\s\S]*?)<\/xdr:(?:oneCellAnchor|twoCellAnchor)>/g;
+        let am;
+        while ((am = anchorRe.exec(xml)) !== null) {
+          const block = am[1];
+          const fromM = /<xdr:from>([\s\S]*?)<\/xdr:from>/.exec(block);
+          const rowM = /<xdr:row>(\d+)<\/xdr:row>/.exec(fromM ? fromM[1] : '');
+          const blipM = /r:embed="([^"]+)"/.exec(block);
+          if (!rowM || !blipM) continue;
+          const R = parseInt(rowM[1], 10); // 0-based 行号
+          const target = relMap[blipM[1]];
+          if (!target) continue;
+          const dir = dn.slice(0, dn.lastIndexOf('/'));
+          const parts = (dir + '/' + target).split('/');
+          const stack = [];
+          for (const p of parts) {
+            if (p === '..') stack.pop();
+            else if (p !== '.' && p !== '') stack.push(p);
+          }
+          const mediaPath = stack.join('/');
+          const mediaFile = zip.file(mediaPath);
+          if (!mediaFile) continue;
+          const data = await mediaFile.async('uint8array');
+          const ext = (mediaPath.split('.').pop() || 'png').toLowerCase();
+          map.set(R, { data, ext });
+        }
+      }
+    } catch (e) {
+      console.warn('提取 Excel 图片失败:', e);
+    }
+    return map;
   }
 
   async function handleSave(e) {
