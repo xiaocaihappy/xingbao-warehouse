@@ -1,8 +1,14 @@
 import { useState, useRef, useMemo, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { insertItem, uploadImage, fetchStaffList, addStaffMember, deleteStaffMember, seedDefaultStaff, subscribeToStaffList, fetchItems } from '../supabase';
+import { insertItem, fetchStaffList, addStaffMember, deleteStaffMember, seedDefaultStaff, subscribeToStaffList, fetchItems } from '../supabase';
 import SelectField from '../components/SelectField';
+import ImageEditor from '../components/ImageEditor';
+import { useImageUploader } from '../utils/useImageUploader';
+import { compressImage } from '../utils/imageUtils';
 import * as XLSX from 'xlsx';
+
+// 切页时的输入草稿（模块级，组件卸载后保留，重挂载时恢复）
+let storageFormDraft = null;
 
 const INITIAL_FORM = {
   shelf_number: '',
@@ -194,11 +200,17 @@ const FIELD_LABELS = {
 export default function Storage({ onStatsChange, onBackHome }) {
   const [form, setForm] = useState(() => {
     const displayName = localStorage.getItem('xingbao_display_name')?.trim();
-    const staffOptions = getInitialStaff();
-    if (displayName && staffOptions.includes(displayName)) {
-      return { ...INITIAL_FORM, staff_name: displayName };
+    const base = getInitialStaff().includes(displayName)
+      ? { ...INITIAL_FORM, staff_name: displayName }
+      : { ...INITIAL_FORM };
+    if (storageFormDraft) {
+      return {
+        ...base,
+        ...storageFormDraft,
+        staff_name: storageFormDraft.staff_name || base.staff_name,
+      };
     }
-    return { ...INITIAL_FORM };
+    return base;
   });
 
   // 受控的销售选项（保留本地存储 + 默认值）
@@ -209,16 +221,24 @@ export default function Storage({ onStatsChange, onBackHome }) {
   const [staffLoading, setStaffLoading] = useState(true);
 
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [toast, setToast] = useState(null);
   const [saveStatus, setSaveStatus] = useState(null); // 'success' | 'error' | null
   const [dragOver, setDragOver] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [reviewModal, setReviewModal] = useState(null);
+  const [editorFile, setEditorFile] = useState(null); // 待裁剪/旋转的图片 Blob
   const fileRef = useRef(null);
   const excelRef = useRef(null);
   const subRef = useRef(null);
+
+  // 切页输入保留：最新 form 引用 + 成功保存标记
+  const formRef = useRef(form);
+  const justSavedRef = useRef(false);
+  useEffect(() => { formRef.current = form; }, [form]);
+
+  // 后台图片上传器（保存时等待在途上传，避免存到半截图）
+  const { uploading, localPreview, startUpload, awaitPending, clear: clearUploader } = useImageUploader(showToast);
 
   // 字段引用（用于 Enter 键跳转焦点）
   const fieldRefs = {
@@ -272,6 +292,15 @@ export default function Storage({ onStatsChange, onBackHome }) {
     };
   }, []);
 
+  // 切页卸载时保留输入草稿；若刚成功保存则清空草稿
+  useEffect(() => () => {
+    if (justSavedRef.current) {
+      storageFormDraft = null;
+    } else {
+      storageFormDraft = { ...formRef.current };
+    }
+  }, []);
+
   // 从 Supabase 数据派生选项列表
   const staffOptions = useMemo(() => staffList.map(s => s.name), [staffList]);
 
@@ -289,7 +318,14 @@ export default function Storage({ onStatsChange, onBackHome }) {
     dupTimer.current = setTimeout(async () => {
       const existing = await findDuplicate();
       if (existing) {
-        setReviewModal({ existing, onConfirm: () => doSave(buildSubmitData()) });
+        setReviewModal({
+          existing,
+          onConfirm: async () => {
+            const url = await awaitPending();
+            const ff = { ...form, image_url: url || form.image_url };
+            doSave(buildSubmitData(ff), ff);
+          },
+        });
       }
     }, 450);
     return () => { if (dupTimer.current) clearTimeout(dupTimer.current); };
@@ -322,42 +358,48 @@ export default function Storage({ onStatsChange, onBackHome }) {
     );
   }
 
-  function buildSubmitData() {
+  function buildSubmitData(target = form) {
     const now = new Date().toISOString();
-    const submitData = { ...form, created_at: now, updated_at: now };
+    const submitData = { ...target, created_at: now, updated_at: now };
     if (!submitData.image_url) delete submitData.image_url;
     return submitData;
   }
 
-  async function findDuplicate() {
-    const { data } = await fetchItems({ shelf_number: form.shelf_number });
-    const list = (data || []).filter(item => isSameRecord(item, form));
+  async function findDuplicate(target = form) {
+    const { data } = await fetchItems({ shelf_number: target.shelf_number });
+    const list = (data || []).filter(item => isSameRecord(item, target));
     return list[0] || null;
   }
 
-  async function handleImageUpload(file) {
+  // 选/拖图片 → 压缩 → 打开编辑器（裁剪/旋转）
+  function openEditorWithFile(file) {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('图片大小不能超过 10MB', 'error');
+    if (!file.type || !file.type.startsWith('image/')) {
+      showToast('请选择图片文件', 'error');
       return;
     }
-    setUploading(true);
-    const { data: url, error } = await uploadImage(file);
-    setUploading(false);
-    if (!error && url) {
-      setForm(prev => ({ ...prev, image_url: url }));
-      showToast('图片上传成功', 'success');
-    } else {
-      showToast('上传失败: ' + (error?.message || '未知错误'), 'error');
+    if (file.size > 15 * 1024 * 1024) {
+      showToast('图片大小不能超过 15MB', 'error');
+      return;
     }
+    compressImage(file)
+      .then((blob) => { setEditorFile(blob); })
+      .catch(() => showToast('图片读取失败', 'error'));
+  }
+
+  // 编辑器确认：拿到裁剪+旋转后的 Blob → 后台异步上传
+  function handleEditorApply(blob) {
+    setEditorFile(null);
+    startUpload(blob);
   }
 
   function removeImage() {
     setForm(prev => ({ ...prev, image_url: '' }));
+    clearUploader();
   }
 
   function handleFilePick(e) {
-    handleImageUpload(e.target.files?.[0]);
+    openEditorWithFile(e.target.files?.[0]);
     e.target.value = '';
   }
 
@@ -365,7 +407,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
     e.preventDefault();
     e.stopPropagation();
     setDragOver(false);
-    handleImageUpload(e.dataTransfer?.files?.[0]);
+    openEditorWithFile(e.dataTransfer?.files?.[0]);
   }
 
   function handleDragOver(e) {
@@ -432,25 +474,31 @@ export default function Storage({ onStatsChange, onBackHome }) {
       showToast('请填写货架号（第几列）和移印编号', 'error');
       return;
     }
-    const existing = await findDuplicate();
+    // 若有图片正在后台上传，先等待完成，避免存到不完整的图片
+    const url = await awaitPending();
+    const finalForm = { ...form, image_url: url || form.image_url };
+    const existing = await findDuplicate(finalForm);
     if (existing) {
-      setReviewModal({ existing, onConfirm: () => doSave(buildSubmitData()) });
+      setReviewModal({ existing, onConfirm: () => doSave(buildSubmitData(finalForm), finalForm) });
       return;
     }
-    doSave(buildSubmitData());
+    doSave(buildSubmitData(finalForm), finalForm);
   }
 
-  async function doSave(submitData) {
+  async function doSave(submitData, srcForm = form) {
     setLoading(true);
     const { error } = await insertItem(submitData);
     setLoading(false);
     if (!error) {
       TEXT_FIELDS.forEach(field => {
-        if (field.hasHistory) addFieldHistory(field.key, form[field.key]);
+        if (field.hasHistory) addFieldHistory(field.key, srcForm[field.key]);
       });
       showToast('✓ 样品信息保存成功', 'success');
       setSaveStatus('success');
       setTimeout(() => setSaveStatus(null), 4000);
+      // 标记已保存，卸载时不再写回草稿
+      justSavedRef.current = true;
+      storageFormDraft = null;
       setForm({ ...INITIAL_FORM });
       onStatsChange?.();
     } else {
@@ -586,17 +634,27 @@ export default function Storage({ onStatsChange, onBackHome }) {
           <div className={`stg-field stg-field--cyan stg-stagger`} style={{ animationDelay: `${0.08 + 6 * 0.05}s` }}>
             <label className="stg-field-label">上传图片</label>
             <input ref={fileRef} type="file" accept="image/*" onChange={handleFilePick} style={{ display: 'none' }} />
-            {form.image_url ? (
+            {(form.image_url || localPreview) ? (
               <div className="stg-upload-row">
-                <div className="stg-upload-preview">
-                  <img src={form.image_url} alt="样品预览" className="stg-upload-img" />
+                <div
+                  className="stg-upload-preview"
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  title="可拖拽新图片到此替换"
+                >
+                  <img src={localPreview || form.image_url} alt="样品预览" className="stg-upload-img" />
+                  {uploading && <div className="stg-upload-loading-badge">⏳ 上传中</div>}
                   <button type="button" className="stg-upload-remove" onClick={removeImage} title="移除图片">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                   </button>
                 </div>
-                <button type="button" className="stg-upload-change" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                  {uploading ? '⏳ 上传中...' : '📷 更换图片'}
-                </button>
+                <div className="stg-upload-side">
+                  <button type="button" className="stg-upload-change" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                    {uploading ? '⏳ 上传中...' : '📷 更换图片'}
+                  </button>
+                  {uploading && <span className="stg-upload-hint">图片后台上传中，保存时会自动等待完成</span>}
+                </div>
               </div>
             ) : (
               <button
@@ -645,6 +703,15 @@ export default function Storage({ onStatsChange, onBackHome }) {
       <div className="stg-bg-decor" aria-hidden="true">
         <div className="stg-bg-grid" />
       </div>
+
+      {/* ===== 图片编辑弹窗（裁剪 / 旋转） ===== */}
+      {editorFile && (
+        <ImageEditor
+          file={editorFile}
+          onApply={handleEditorApply}
+          onCancel={() => setEditorFile(null)}
+        />
+      )}
 
       {/* ===== 重复记录审查弹窗 ===== */}
       {reviewModal && (

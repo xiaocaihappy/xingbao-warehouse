@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
-import { fetchItems, updateItem, deleteItem, subscribeToItems, uploadImage, fetchStaffList, subscribeToStaffList, seedDefaultStaff } from '../supabase';
+import { fetchItems, updateItem, deleteItem, subscribeToItems, fetchStaffList, subscribeToStaffList, seedDefaultStaff } from '../supabase';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
+import ImageEditor from '../components/ImageEditor';
+import { useImageUploader } from '../utils/useImageUploader';
+import { compressImage } from '../utils/imageUtils';
 
 const PAGE_SIZE = 12;
 
@@ -16,6 +19,8 @@ export default function Query({ onStatsChange }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [editModal, setEditModal] = useState(null);
+  const [editorFile, setEditorFile] = useState(null);
+  const uploader = useImageUploader(showToast);
   const [toast, setToast] = useState(null);
   const [expandedImage, setExpandedImage] = useState(null);
   const [staffList, setStaffList] = useState([]);
@@ -137,17 +142,34 @@ export default function Query({ onStatsChange }) {
   // 编辑
   async function handleEdit() {
     const { id, ...updates } = editModal;
+    // 若有图片正在后台上传，先等待完成，避免存到不完整的图片
+    const url = await uploader.awaitPending();
+    updates.image_url = url || editModal.image_url;
     const { error: err } = await updateItem(id, updates);
     if (!err) { showToast('更新成功', 'success'); setEditModal(null); loadItems(); onStatsChange?.(); }
     else { showToast('更新失败: ' + err.message, 'error'); }
   }
 
-  async function handleImageChange(e) {
-    const file = e.target.files?.[0];
+  // 选/拖图片 → 压缩 → 打开编辑器（裁剪/旋转）
+  function openEditorWithFile(file) {
     if (!file) return;
-    const { data: url, error: err } = await uploadImage(file);
-    if (!err && url) { setEditModal(prev => ({ ...prev, image_url: url })); }
-    else { showToast('图片上传失败', 'error'); }
+    if (!file.type || !file.type.startsWith('image/')) { showToast('请选择图片文件', 'error'); return; }
+    if (file.size > 15 * 1024 * 1024) { showToast('图片大小不能超过 15MB', 'error'); return; }
+    compressImage(file).then((blob) => setEditorFile(blob)).catch(() => showToast('图片读取失败', 'error'));
+  }
+  function handleImageChange(e) {
+    openEditorWithFile(e.target.files?.[0]);
+    e.target.value = '';
+  }
+  function handleEditDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    openEditorWithFile(e.dataTransfer?.files?.[0]);
+  }
+  // 编辑器确认：拿到裁剪+旋转后的 Blob → 后台异步上传
+  function handleEditorApply(blob) {
+    setEditorFile(null);
+    uploader.startUpload(blob);
   }
 
   // 导出全部数据（Excel .xlsx 含嵌入图片，通过主进程生成）
@@ -448,21 +470,29 @@ export default function Query({ onStatsChange }) {
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                 <label>样品图片</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  {editModal.image_url && editModal.image_url !== 'EMPTY' ? (
-                    <div style={{ position: 'relative', display: 'inline-block' }}>
-                      <img src={editModal.image_url} alt="预览" className="upload-preview-img" style={{ maxWidth: 120, maxHeight: 120 }} />
+                  {(editModal.image_url && editModal.image_url !== 'EMPTY') || uploader.localPreview ? (
+                    <div
+                      style={{ position: 'relative', display: 'inline-block' }}
+                      onDrop={handleEditDrop}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      title="可拖拽新图片到此替换"
+                    >
+                      <img src={uploader.localPreview || editModal.image_url} alt="预览" className="upload-preview-img" style={{ maxWidth: 120, maxHeight: 120 }} />
+                      {uploader.uploading && <div className="stg-upload-loading-badge">⏳ 上传中</div>}
                       <button
                         type="button"
-                        onClick={() => setEditModal({ ...editModal, image_url: '' })}
+                        onClick={() => { setEditModal({ ...editModal, image_url: '' }); uploader.clear(); }}
                         className="img-delete-btn"
                         title="删除图片"
                       >×</button>
                     </div>
                   ) : null}
                   <label className="btn btn-outline btn-sm" style={{ cursor: 'pointer' }}>
-                    {editModal.image_url && editModal.image_url !== 'EMPTY' ? '更换图片' : '添加图片'}
+                    {uploader.uploading ? '⏳ 上传中...' : (editModal.image_url && editModal.image_url !== 'EMPTY' ? '更换图片' : '添加图片')}
                     <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
                   </label>
+                  {uploader.uploading && <span className="stg-upload-hint">图片后台上传中，保存时会自动等待完成</span>}
                 </div>
               </div>
             </div>
@@ -472,6 +502,15 @@ export default function Query({ onStatsChange }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 图片编辑弹窗（裁剪 / 旋转） */}
+      {editorFile && (
+        <ImageEditor
+          file={editorFile}
+          onApply={handleEditorApply}
+          onCancel={() => setEditorFile(null)}
+        />
       )}
 
       {/* 图片放大预览弹窗 */}
