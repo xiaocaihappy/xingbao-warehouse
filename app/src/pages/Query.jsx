@@ -1,5 +1,21 @@
-import { useState, useEffect } from 'react';
-import { fetchItems, updateItem, deleteItem, subscribeToItems, fetchStaffList, subscribeToStaffList, seedDefaultStaff } from '../supabase';
+import { useState, useEffect, useRef } from 'react';
+import {
+  fetchItems,
+  updateItem,
+  deleteItem,
+  subscribeToItems,
+  fetchStaffList,
+  subscribeToStaffList,
+  seedDefaultStaff,
+  fetchFilterOptions,
+} from '../supabase';
+import {
+  getCachedPage,
+  setCachedPage,
+  getCachedOptions,
+  setCachedOptions,
+  matchesFilters,
+} from '../utils/queryCache';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import ImageEditor from '../components/ImageEditor';
@@ -9,8 +25,10 @@ import { compressImage } from '../utils/imageUtils';
 const PAGE_SIZE = 12;
 
 export default function Query({ onStatsChange }) {
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState([]); // 当前页数据（最多 PAGE_SIZE 行）
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [yearFilter, setYearFilter] = useState('');
@@ -25,6 +43,33 @@ export default function Query({ onStatsChange }) {
   const [expandedImage, setExpandedImage] = useState(null);
   const [staffList, setStaffList] = useState([]);
   const [staffLoading, setStaffLoading] = useState(true);
+  const [channels, setChannels] = useState([]);
+  const [years, setYears] = useState([]);
+
+  // 用 ref 保存最新状态，供实时增量更新读取（避免闭包过期）
+  const itemsRef = useRef(items); itemsRef.current = items;
+  const totalCountRef = useRef(totalCount); totalCountRef.current = totalCount;
+  const pageRef = useRef(page); pageRef.current = page;
+  const filtersRef = useRef({}); filtersRef.current = { search, sales_channel: channelFilter, year: yearFilter };
+
+  function currentFilters() {
+    return { search, sales_channel: channelFilter, year: yearFilter };
+  }
+  function buildFilters() {
+    const f = {};
+    if (search) f.search = search;
+    if (channelFilter) f.sales_channel = channelFilter;
+    if (yearFilter) f.year = yearFilter;
+    return f;
+  }
+
+  // 缩略图：列表图请求小尺寸（若 Supabase 未开启图片变换则该参数被忽略，退化为原图 + 懒加载）
+  function thumbUrl(url) {
+    if (!url || url === 'EMPTY') return url;
+    return url.includes('?')
+      ? `${url}&width=240&height=240&resize=cover`
+      : `${url}?width=240&height=240&resize=cover`;
+  }
 
   // 加载人员列表（与存储系统同步）
   const DEFAULT_STAFF_NAMES = ['陈育婷', '蔡丹媛', '蔡中卫', '林沐锟', '丁小梅', '林晓媛'];
@@ -36,7 +81,7 @@ export default function Query({ onStatsChange }) {
         const { data } = await fetchStaffList();
         if (data && data.length > 0 && !cancelled) {
           setStaffList(data);
-          localStorage.setItem('xingbao_staff_fallback', JSON.stringify(data.map(s => s.name)));
+          localStorage.setItem('xingbao_staff_fallback', JSON.stringify(data.map((s) => s.name)));
         } else if (!cancelled) {
           const fallback = localStorage.getItem('xingbao_staff_fallback');
           const names = fallback ? JSON.parse(fallback) : DEFAULT_STAFF_NAMES;
@@ -56,51 +101,111 @@ export default function Query({ onStatsChange }) {
       const { data } = await fetchStaffList();
       if (data && data.length > 0 && !cancelled) {
         setStaffList(data);
-        localStorage.setItem('xingbao_staff_fallback', JSON.stringify(data.map(s => s.name)));
+        localStorage.setItem('xingbao_staff_fallback', JSON.stringify(data.map((s) => s.name)));
       }
     });
     return () => { cancelled = true; sub?.unsubscribe?.(); };
   }, []);
 
+  // 筛选下拉选项（渠道/年份）：缓存优先，后台刷新
+  useEffect(() => { refreshFilterOptions(); }, []);
+  async function refreshFilterOptions() {
+    const cached = getCachedOptions();
+    if (cached) { setChannels(cached.channels); setYears(cached.years); }
+    try {
+      const { channels: ch, years: yr } = await fetchFilterOptions();
+      setChannels(ch); setYears(yr); setCachedOptions(ch, yr);
+    } catch { /* 忽略，保留上次结果 */ }
+  }
 
+  // 缓存优先加载当前页：有缓存先秒出，后台再静默刷新
+  async function loadItems(f, p) {
+    const filters = f || currentFilters();
+    const pg = typeof p === 'number' ? p : page;
+    const cached = getCachedPage(filters, pg);
+    if (cached) {
+      setItems(cached.rows);
+      setTotalCount(cached.count);
+      setLoading(false);
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    setError(null);
+    try {
+      const { data, count, error: fetchError } = await fetchItems({ ...filters, page: pg, pageSize: PAGE_SIZE });
+      if (fetchError) {
+        if (!cached) { setError(fetchError.message || '数据加载失败'); setItems([]); }
+      } else {
+        setItems(data);
+        setTotalCount(count ?? 0);
+        setCachedPage(filters, pg, data, count ?? 0);
+      }
+    } catch (e) {
+      if (!cached) { setError(e.message || '加载异常'); setItems([]); }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  // 筛选变化 → 回第一页并加载
   useEffect(() => {
-    loadItems();
+    loadItems({ search, sales_channel: channelFilter, year: yearFilter }, 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, yearFilter, channelFilter]);
+
+  // 翻页 → 加载对应页
+  useEffect(() => {
+    loadItems({ search, sales_channel: channelFilter, year: yearFilter }, page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  // 实时订阅：增量更新当前页（不再全表重拉）
+  useEffect(() => {
     let sub = null;
-    try { sub = subscribeToItems(() => loadItems()); }
-    catch (e) { console.error('实时订阅初始化失败:', e); }
+    try {
+      sub = subscribeToItems((payload) => applyRealtime(payload));
+    } catch (e) { console.error('实时订阅初始化失败:', e); }
     return () => { sub?.unsubscribe?.(); };
   }, []);
 
-  useEffect(() => { setPage(1); loadItems(); }, [search, yearFilter, channelFilter]);
-
-  async function loadItems() {
-    setLoading(true);
-    setError(null);
-    try {
-      const filters = {};
-      if (search) filters.search = search;
-      if (channelFilter) filters.sales_channel = channelFilter;
-
-      const { data, error: fetchError } = await fetchItems(filters);
-      if (fetchError) {
-        setError(fetchError.message || '数据加载失败');
-        setItems([]);
-      } else if (Array.isArray(data)) {
-        // 年份过滤（客户端）
-        if (yearFilter) {
-          setItems(data.filter(d => d.created_at?.startsWith(yearFilter)));
-        } else {
-          setItems(data);
-        }
+  function applyRealtime(payload) {
+    const { eventType, new: newRow, old: oldRow } = payload;
+    const row = newRow || oldRow;
+    if (!row) return;
+    const f = filtersRef.current;
+    const cur = itemsRef.current;
+    const before = matchesFilters(oldRow, f);
+    const after = matchesFilters(newRow, f);
+    let next = [...cur];
+    let delta = 0;
+    if (eventType === 'DELETE') {
+      next = next.filter((r) => r.id !== row.id);
+      delta = -1;
+    } else if (eventType === 'INSERT') {
+      if (after) {
+        if (!next.find((r) => r.id === row.id)) next = [row, ...next];
+        delta = 1;
       } else {
-        setItems([]);
+        next = next.filter((r) => r.id !== row.id);
       }
-    } catch (e) {
-      setError(e.message || '加载异常');
-      setItems([]);
-    } finally {
-      setLoading(false);
+    } else if (eventType === 'UPDATE') {
+      if (after) {
+        const idx = next.findIndex((r) => r.id === row.id);
+        if (idx >= 0) next[idx] = row;
+        else next = [row, ...next];
+      } else {
+        next = next.filter((r) => r.id !== row.id);
+      }
+      delta = (after ? 1 : 0) - (before ? 1 : 0);
     }
+    next = next.slice(0, PAGE_SIZE);
+    const newCount = (totalCountRef.current || 0) + delta;
+    setItems(next);
+    setTotalCount(newCount);
+    setCachedPage(f, pageRef.current, next, newCount);
+    refreshFilterOptions();
   }
 
   // 选择
@@ -113,14 +218,14 @@ export default function Query({ onStatsChange }) {
 
   function toggleSelectAll() {
     if (selectAll) { setSelectedIds(new Set()); setSelectAll(false); }
-    else { setSelectedIds(new Set(safeItems.map(i => i.id))); setSelectAll(true); }
+    else { setSelectedIds(new Set(safeItems.map((i) => i.id))); setSelectAll(true); }
   }
 
   // 删除
   async function handleDelete(id) {
     if (!confirm('确定删除该记录？此操作不可撤销。')) return;
     const { error: err } = await deleteItem(id);
-    if (!err) { showToast('已删除', 'success'); loadItems(); onStatsChange?.(); }
+    if (!err) { showToast('已删除', 'success'); loadItems(filtersRef.current, pageRef.current); onStatsChange?.(); }
     else { showToast('删除失败: ' + err.message, 'error'); }
   }
 
@@ -135,7 +240,7 @@ export default function Query({ onStatsChange }) {
     setSelectedIds(new Set());
     setSelectAll(false);
     showToast(`删除完成${failed > 0 ? `（${failed} 条失败）` : ''}`, failed > 0 ? 'error' : 'success');
-    loadItems();
+    loadItems(filtersRef.current, pageRef.current);
     onStatsChange?.();
   }
 
@@ -146,7 +251,7 @@ export default function Query({ onStatsChange }) {
     const url = await uploader.awaitPending();
     updates.image_url = url || editModal.image_url;
     const { error: err } = await updateItem(id, updates);
-    if (!err) { showToast('更新成功', 'success'); setEditModal(null); loadItems(); onStatsChange?.(); }
+    if (!err) { showToast('更新成功', 'success'); setEditModal(null); loadItems(filtersRef.current, pageRef.current); onStatsChange?.(); }
     else { showToast('更新失败: ' + err.message, 'error'); }
   }
 
@@ -172,13 +277,14 @@ export default function Query({ onStatsChange }) {
     uploader.startUpload(blob);
   }
 
-  // 导出全部数据（Excel .xlsx 含嵌入图片，通过主进程生成）
+  // 导出全部数据（Excel .xlsx 含嵌入图片，通过主进程生成）——按需全量拉取，不依赖当前页缓存
   async function exportCSV() {
-    if (safeItems.length === 0) { showToast('无数据可导出', 'error'); return; }
+    const { data } = await fetchItems(buildFilters());
+    const all = Array.isArray(data) ? data : [];
+    if (all.length === 0) { showToast('无数据可导出', 'error'); return; }
     const dateStr = new Date().toISOString().slice(0, 10);
 
-    // 准备数据（不含图片 buffer，只传 URL 由主进程下载）
-    const items = safeItems.map(i => ({
+    const items = all.map((i) => ({
       id: i.id,
       shelf_number: i.shelf_number,
       stamp_code: i.stamp_code,
@@ -190,8 +296,8 @@ export default function Query({ onStatsChange }) {
       created_at: i.created_at,
     }));
 
-    const withImagesCount = items.filter(i => i.image_url && i.image_url !== 'EMPTY').length;
-    showToast(`正在生成 Excel${withImagesCount > 0 ? '（含 ' + withImagesCount + ' 张图片）' : ''}...`, 'success');
+    const withImagesCount = items.filter((i) => i.image_url && i.image_url !== 'EMPTY').length;
+    showToast(`正在生成 Excel${withImagesCount > 0 ? `（含 ${withImagesCount} 张图片）` : ''}...`, 'success');
 
     try {
       const result = await window.electronAPI.exportExcel(items);
@@ -200,7 +306,6 @@ export default function Query({ onStatsChange }) {
         return;
       }
 
-      // 创建 Blob 并触发下载
       const blob = new Blob([result.buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
@@ -209,17 +314,19 @@ export default function Query({ onStatsChange }) {
       link.download = `星堡移印样品_${dateStr}.xlsx`;
       link.click();
 
-      showToast(`已导出 ${safeItems.length} 条数据（含图片的 .xlsx）`, 'success');
+      showToast(`已导出 ${all.length} 条数据（含图片的 .xlsx）`, 'success');
     } catch (e) {
       showToast('导出失败: ' + (e.message || '未知错误'), 'error');
     }
   }
 
-  function exportImages() {
-    const withImages = safeItems.filter(i => i.image_url && i.image_url !== 'EMPTY');
+  async function exportImages() {
+    const { data } = await fetchItems(buildFilters());
+    const all = Array.isArray(data) ? data : [];
+    const withImages = all.filter((i) => i.image_url && i.image_url !== 'EMPTY');
     if (withImages.length === 0) { showToast('没有可导出的图片', 'error'); return; }
     const html = `<html><body style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:16px;background:#0f131a;">
-      ${withImages.map((i, idx) => `<div style="text-align:center;color:#fff;font-size:12px;">
+      ${withImages.map((i) => `<div style="text-align:center;color:#fff;font-size:12px;">
         <img src="${i.image_url}" style="width:100%;border-radius:8px;" onerror="this.style.display='none'" />
         <p>${i.stamp_code} / ${i.shelf_number}</p></div>`).join('')}</body></html>`;
     const blob = new Blob([html], { type: 'text/html' });
@@ -230,13 +337,16 @@ export default function Query({ onStatsChange }) {
     showToast(`已导出 ${withImages.length} 张图片预览`, 'success');
   }
 
-  function exportSelected() {
+  async function exportSelected() {
     if (selectedIds.size === 0) { showToast('请先选择记录', 'error'); return; }
-    const selected = safeItems.filter(i => selectedIds.has(i.id));
+    const { data } = await fetchItems(buildFilters());
+    const all = Array.isArray(data) ? data : [];
+    const selected = all.filter((i) => selectedIds.has(i.id));
+    if (selected.length === 0) { showToast('所选记录不在当前筛选范围内', 'error'); return; }
     const headers = ['货架号', '移印编号', '销售', '人员', '格子号', '产品货号'];
-    const rows = selected.map(i => [i.shelf_number, i.stamp_code, i.sales_channel, i.staff_name, i.grid_number, i.product_code]);
-    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','))].join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const rows = selected.map((i) => [i.shelf_number, i.stamp_code, i.sales_channel, i.staff_name, i.grid_number, i.product_code]);
+    const csv = [headers.join(','), ...rows.map((r) => r.map((v) => `"${String(v || '').replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `星堡选中数据_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -250,12 +360,8 @@ export default function Query({ onStatsChange }) {
   }
 
   const safeItems = Array.isArray(items) ? items : [];
-  const totalPages = Math.ceil(safeItems.length / PAGE_SIZE);
-  const pagedItems = safeItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  // 渠道列表和年份列表
-  const channels = [...new Set(safeItems.map(i => i?.sales_channel).filter(Boolean))].sort();
-  const years = [...new Set(safeItems.map(i => i?.created_at?.slice(0, 4)).filter(Boolean))].sort().reverse();
+  const pagedItems = safeItems;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   return (
     <div className="query-page-v2">
@@ -280,19 +386,19 @@ export default function Query({ onStatsChange }) {
               type="text"
               placeholder="搜索移印编号、人员姓名、销售、货架号..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <button className="btn btn-primary-glow" onClick={loadItems}>查询</button>
+          <button className="btn btn-primary-glow" onClick={() => loadItems(currentFilters(), 1)}>查询</button>
         </div>
         <div className="filter-row">
-          <select className="filter-select" value={channelFilter} onChange={e => setChannelFilter(e.target.value)} onMouseDown={e => e.stopPropagation()}>
+          <select className="filter-select" value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} onMouseDown={(e) => e.stopPropagation()}>
             <option value="">全部渠道</option>
-            {channels.map(c => <option key={c} value={c}>{c}</option>)}
+            {channels.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <select className="filter-select" value={yearFilter} onChange={e => setYearFilter(e.target.value)} onMouseDown={e => e.stopPropagation()}>
+          <select className="filter-select" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} onMouseDown={(e) => e.stopPropagation()}>
             <option value="">全部年份</option>
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
       </div>
@@ -326,7 +432,7 @@ export default function Query({ onStatsChange }) {
           <div className="empty-state">
             <div className="icon">⚠️</div>
             <p style={{ color: '#ef4444', marginBottom: 16 }}>{error}</p>
-            <button className="btn btn-outline btn-sm" onClick={loadItems}>重试</button>
+            <button className="btn btn-outline btn-sm" onClick={() => loadItems(currentFilters(), page)}>重试</button>
           </div>
         ) : pagedItems.length === 0 ? (
           <div className="empty-state">
@@ -354,7 +460,7 @@ export default function Query({ onStatsChange }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagedItems.map(item => (
+                  {pagedItems.map((item) => (
                     <tr key={item.id} className={selectedIds.has(item.id) ? 'row-selected' : ''}>
                       <td>
                         <input
@@ -371,11 +477,13 @@ export default function Query({ onStatsChange }) {
                       <td>
                         {item.image_url && item.image_url !== 'EMPTY' ? (
                           <img
-                            src={item.image_url}
+                            src={thumbUrl(item.image_url)}
                             alt=""
                             className="sample-image"
+                            loading="lazy"
+                            decoding="async"
                             onClick={() => setExpandedImage(item)}
-                            onError={e => { e.currentTarget.style.display = 'none'; }}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
                           />
                         ) : (
                           <div className="no-image">📷</div>
@@ -400,7 +508,10 @@ export default function Query({ onStatsChange }) {
 
             {/* 底部信息栏 */}
             <div className="table-footer">
-              <span className="table-count">共 {safeItems.length} 条记录</span>
+              <span className="table-count">
+                共 {totalCount} 条记录
+                {refreshing && <span style={{ opacity: 0.6, fontSize: 12, marginLeft: 8 }}>· 刷新中…</span>}
+              </span>
               {totalPages > 1 && (
                 <div className="pagination">
                   <button disabled={page === 1} onClick={() => setPage(1)} title="首页">«« 首页</button>
@@ -430,42 +541,42 @@ export default function Query({ onStatsChange }) {
       {/* 编辑弹窗 */}
       {editModal && (
         <div className="modal-overlay" onClick={() => setEditModal(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>编辑样品信息</h2>
             <div className="modal-form-grid">
               <div className="form-group">
                 <label>货架号</label>
-                <input type="text" value={editModal.shelf_number || ''} onChange={e => setEditModal({ ...editModal, shelf_number: e.target.value })} />
+                <input type="text" value={editModal.shelf_number || ''} onChange={(e) => setEditModal({ ...editModal, shelf_number: e.target.value })} />
               </div>
               <div className="form-group">
                 <label>移印编号</label>
-                <input type="text" value={editModal.stamp_code || ''} onChange={e => setEditModal({ ...editModal, stamp_code: e.target.value })} />
+                <input type="text" value={editModal.stamp_code || ''} onChange={(e) => setEditModal({ ...editModal, stamp_code: e.target.value })} />
               </div>
               <div className="form-group">
                 <label>销售</label>
-                <input type="text" value={editModal.sales_channel || ''} onChange={e => setEditModal({ ...editModal, sales_channel: e.target.value })} />
+                <input type="text" value={editModal.sales_channel || ''} onChange={(e) => setEditModal({ ...editModal, sales_channel: e.target.value })} />
               </div>
               <div className="form-group">
                 <label>人员</label>
                 <select
                   value={editModal.staff_name || ''}
-                  onChange={e => setEditModal({ ...editModal, staff_name: e.target.value })}
-                  onMouseDown={e => e.stopPropagation()}
+                  onChange={(e) => setEditModal({ ...editModal, staff_name: e.target.value })}
+                  onMouseDown={(e) => e.stopPropagation()}
                   disabled={staffLoading}
                 >
                   <option value="">{staffLoading ? '加载中...' : '请选择人员'}</option>
-                  {staffList.map(s => (
+                  {staffList.map((s) => (
                     <option key={s.id} value={s.name}>{s.name}</option>
                   ))}
                 </select>
               </div>
               <div className="form-group">
                 <label>格子号</label>
-                <input type="text" value={editModal.grid_number || ''} onChange={e => setEditModal({ ...editModal, grid_number: e.target.value })} />
+                <input type="text" value={editModal.grid_number || ''} onChange={(e) => setEditModal({ ...editModal, grid_number: e.target.value })} />
               </div>
               <div className="form-group">
                 <label>产品货号</label>
-                <input type="text" value={editModal.product_code || ''} onChange={e => setEditModal({ ...editModal, product_code: e.target.value })} />
+                <input type="text" value={editModal.product_code || ''} onChange={(e) => setEditModal({ ...editModal, product_code: e.target.value })} />
               </div>
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                 <label>样品图片</label>
@@ -513,16 +624,16 @@ export default function Query({ onStatsChange }) {
         />
       )}
 
-      {/* 图片放大预览弹窗 */}
+      {/* 图片放大预览弹窗（用原图，保证清晰度） */}
       {expandedImage && (
         <div className="image-lightbox" key={expandedImage?.id} onClick={() => setExpandedImage(null)}>
           <button className="image-lightbox-close" onClick={() => setExpandedImage(null)} aria-label="关闭预览">×</button>
-          <div className="image-lightbox-content" onClick={e => e.stopPropagation()}>
+          <div className="image-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img
               src={expandedImage.image_url}
               alt={expandedImage.stamp_code || '样品图片'}
               className="image-lightbox-img"
-              onError={e => { e.currentTarget.alt = '图片加载失败'; }}
+              onError={(e) => { e.currentTarget.alt = '图片加载失败'; }}
             />
             <div className="image-lightbox-info">
               <span className="image-lightbox-code">{expandedImage.stamp_code || '-'}</span>

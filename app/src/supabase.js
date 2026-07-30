@@ -86,25 +86,79 @@ export function onAuthStateChange(callback) {
 }
 
 // 数据操作 - 对 storage_items 表
+// 分页模式：传入 page（1 基）/pageSize 时，只返回该页数据并返回总数 count。
+// 兼容模式：不传 page 时返回全部匹配行（Storage 查重依赖此行为，切勿改为分页）。
 export async function fetchItems(filters = {}) {
+  const { search, sales_channel, shelf_number, year, page, pageSize } = filters;
+
+  const applyCommon = (q) => {
+    if (search) {
+      q = q.or(
+        `shelf_number.ilike.%${search}%,stamp_code.ilike.%${search}%,sales_channel.ilike.%${search}%,staff_name.ilike.%${search}%,grid_number.ilike.%${search}%,product_code.ilike.%${search}%`
+      );
+    }
+    if (sales_channel) q = q.eq('sales_channel', sales_channel);
+    if (shelf_number) q = q.ilike('shelf_number', `%${shelf_number}%`);
+    if (year) {
+      const next = String(Number(year) + 1);
+      q = q.gte('created_at', `${year}-01-01T00:00:00`).lt('created_at', `${next}-01-01T00:00:00`);
+    }
+    return q;
+  };
+
+  // —— 分页模式：服务端 range + 精确总数 ——
+  if (typeof page === 'number') {
+    const size = pageSize || 12;
+    const from = (page - 1) * size;
+    const to = from + size - 1;
+    let query = supabase
+      .from(TABLE_NAME)
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    query = applyCommon(query);
+    const { data, error, count } = await query;
+    return { data: data || [], count: count ?? 0, error };
+  }
+
+  // —— 兼容模式：返回全部匹配行 ——
   let query = supabase.from(TABLE_NAME).select('*');
-
-  if (filters.search) {
-    query = query.or(
-      `shelf_number.ilike.%${filters.search}%,stamp_code.ilike.%${filters.search}%,sales_channel.ilike.%${filters.search}%,staff_name.ilike.%${filters.search}%,grid_number.ilike.%${filters.search}%,product_code.ilike.%${filters.search}%`
-    );
-  }
-  if (filters.sales_channel) {
-    query = query.eq('sales_channel', filters.sales_channel);
-  }
-  if (filters.shelf_number) {
-    query = query.ilike('shelf_number', `%${filters.shelf_number}%`);
-  }
-
+  query = applyCommon(query);
   query = query.order('created_at', { ascending: false });
-
   const { data, error } = await query;
   return { data, error };
+}
+
+// 轻量统计：总数（head count，不下载行）+ 渠道分布（仅取 sales_channel 轻列）
+export async function fetchItemStats() {
+  const { count, error: countErr } = await supabase
+    .from(TABLE_NAME)
+    .select('*', { count: 'exact', head: true });
+  if (countErr) return { total: 0, channels: [], error: countErr };
+
+  const { data, error } = await supabase.from(TABLE_NAME).select('sales_channel');
+  const channelMap = {};
+  (data || []).forEach((it) => {
+    const ch = it.sales_channel || '未分类';
+    channelMap[ch] = (channelMap[ch] || 0) + 1;
+  });
+  const channels = Object.entries(channelMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+  return { total: count || 0, channels, error: error || null };
+}
+
+// 筛选下拉选项：去重渠道 + 年份（仅取轻量列，无图片）
+export async function fetchFilterOptions() {
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .select('sales_channel, created_at');
+  if (error) return { channels: [], years: [], error };
+  const channels = [...new Set((data || []).map((i) => i.sales_channel).filter(Boolean))].sort();
+  const years = [...new Set((data || []).map((i) => (i.created_at || '').slice(0, 4)).filter(Boolean))]
+    .sort()
+    .reverse();
+  return { channels, years, error: null };
 }
 
 export async function insertItem(item) {

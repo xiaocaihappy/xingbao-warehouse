@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchItems, subscribeToItems } from '../supabase';
+import { fetchItemStats, subscribeToItems } from '../supabase';
 import Query from './Query';
 import Storage from './Storage';
 import Settings from './Settings';
@@ -27,19 +27,9 @@ export default function Dashboard({ user, onLogout }) {
 
   async function loadStats() {
     try {
-      const { data } = await fetchItems();
-      if (Array.isArray(data)) {
-        const channelMap = {};
-        data.forEach((item) => {
-          const ch = item.sales_channel || '未分类';
-          channelMap[ch] = (channelMap[ch] || 0) + 1;
-        });
-        setStats({
-          total: data.length,
-          channels: Object.entries(channelMap)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 4),
-        });
+      const { total, channels, error } = await fetchItemStats();
+      if (!error) {
+        setStats({ total, channels });
       }
     } catch (e) {
       console.error('加载统计数据失败:', e);
