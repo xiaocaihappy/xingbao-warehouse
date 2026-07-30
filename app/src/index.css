@@ -3763,14 +3763,36 @@ body.theme-light {
 }
 .img-editor-handle {
   position: absolute;
-  right: -6px;
-  bottom: -6px;
-  width: 14px;
-  height: 14px;
   background: #00e5c0;
   border: 2px solid #fff;
+  box-sizing: border-box;
+  z-index: 2;
+}
+/* 四角：圆形 */
+.img-editor-handle--nw,
+.img-editor-handle--ne,
+.img-editor-handle--sw,
+.img-editor-handle--se {
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  cursor: nwse-resize;
+}
+/* 四边：条形 */
+.img-editor-handle--n,
+.img-editor-handle--s {
+  width: 24px;
+  height: 8px;
+  border-radius: 4px;
+}
+.img-editor-handle--w,
+.img-editor-handle--e {
+  width: 8px;
+  height: 24px;
+  border-radius: 4px;
+}
+.img-editor-handle:hover {
+  background: #fff;
+  border-color: #00e5c0;
 }
 .img-editor-actions {
   display: flex;

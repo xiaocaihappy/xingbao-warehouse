@@ -5,6 +5,7 @@ const DISP_MAX = 340;
 const MIN_SIDE = 24;
 
 // 图片编辑弹窗：支持 1:1 正方形裁切 / 自由裁切 + 旋转（90°快转 + 滑块）
+// 自由裁切：四角 + 四边均可独立拖动调整
 // 返回裁剪+旋转后的压缩 Blob（通过 onApply）
 export default function ImageEditor({ file, onApply, onCancel }) {
   const [img, setImg] = useState(null);
@@ -17,6 +18,8 @@ export default function ImageEditor({ file, onApply, onCancel }) {
   const [objectUrl, setObjectUrl] = useState(null);
   const stageRef = useRef(null);
   const dragRef = useRef(null);
+
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
   // 初始化图片与默认裁切框；单独维护 objectURL 用于显示，避免 fileToImage 立即 revoke 后裂图
   useEffect(() => {
@@ -57,7 +60,75 @@ export default function ImageEditor({ file, onApply, onCancel }) {
     return { x: 0, y: 0, w: dw, h: dh };
   }
 
-  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  // 自由模式下，根据拖拽手柄计算新的 crop
+  function computeFreeResize(handle, dx, dy, base, dw, dh) {
+    const c = { ...base };
+    switch (handle) {
+      case 'se': {
+        c.w = clamp(c.w + dx, MIN_SIDE, dw - c.x);
+        c.h = clamp(c.h + dy, MIN_SIDE, dh - c.y);
+        break;
+      }
+      case 'nw': {
+        const nx = clamp(c.x + dx, 0, c.x + c.w - MIN_SIDE);
+        const ny = clamp(c.y + dy, 0, c.y + c.h - MIN_SIDE);
+        c.w = c.x + c.w - nx;
+        c.h = c.y + c.h - ny;
+        c.x = nx;
+        c.y = ny;
+        break;
+      }
+      case 'ne': {
+        const ny = clamp(c.y + dy, 0, c.y + c.h - MIN_SIDE);
+        c.w = clamp(c.w + dx, MIN_SIDE, dw - c.x);
+        c.h = c.y + c.h - ny;
+        c.y = ny;
+        break;
+      }
+      case 'sw': {
+        const nx = clamp(c.x + dx, 0, c.x + c.w - MIN_SIDE);
+        c.w = c.x + c.w - nx;
+        c.h = clamp(c.h + dy, MIN_SIDE, dh - c.y);
+        c.x = nx;
+        break;
+      }
+      case 'n': {
+        const ny = clamp(c.y + dy, 0, c.y + c.h - MIN_SIDE);
+        c.h = c.y + c.h - ny;
+        c.y = ny;
+        break;
+      }
+      case 's': {
+        c.h = clamp(c.h + dy, MIN_SIDE, dh - c.y);
+        break;
+      }
+      case 'w': {
+        const nx = clamp(c.x + dx, 0, c.x + c.w - MIN_SIDE);
+        c.w = c.x + c.w - nx;
+        c.x = nx;
+        break;
+      }
+      case 'e': {
+        c.w = clamp(c.w + dx, MIN_SIDE, dw - c.x);
+        break;
+      }
+      default:
+        break;
+    }
+    return c;
+  }
+
+  // 1:1 模式下仅右下角缩放，保持正方形
+  function computeSquareResize(dx, dy, base, dw, dh) {
+    const c = { ...base };
+    let nw = clamp(c.w + dx, MIN_SIDE, dw - c.x);
+    if (mode === '1:1') {
+      nw = Math.min(nw, dh - c.y, dw - c.x);
+    }
+    c.w = nw;
+    c.h = nw;
+    return c;
+  }
 
   function onBoxMouseDown(e) {
     e.preventDefault();
@@ -66,13 +137,17 @@ export default function ImageEditor({ file, onApply, onCancel }) {
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   }
-  function onHandleMouseDown(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    dragRef.current = { type: 'resize', sx: e.clientX, sy: e.clientY, c: { ...crop } };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+
+  function startResize(handle) {
+    return function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragRef.current = { type: 'resize', handle, sx: e.clientX, sy: e.clientY, c: { ...crop } };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
   }
+
   const onMove = useCallback((e) => {
     const d = dragRef.current;
     if (!d) return;
@@ -83,16 +158,12 @@ export default function ImageEditor({ file, onApply, onCancel }) {
       const nx = clamp(d.c.x + dx, 0, dw - d.c.w);
       const ny = clamp(d.c.y + dy, 0, dh - d.c.h);
       setCrop({ ...d.c, x: nx, y: ny });
-    } else {
-      let nw = clamp(d.c.w + dx, MIN_SIDE, dw - d.c.x);
-      let nh = d.c.h;
+    } else if (d.type === 'resize') {
       if (mode === '1:1') {
-        nw = Math.min(nw, dh - d.c.y, dw - d.c.x);
-        nh = nw;
+        setCrop(computeSquareResize(dx, dy, d.c, dw, dh));
       } else {
-        nh = clamp(d.c.h + dy, MIN_SIDE, dh - d.c.y);
+        setCrop(computeFreeResize(d.handle, dx, dy, d.c, dw, dh));
       }
-      setCrop({ ...d.c, w: nw, h: nh });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disp, mode]);
@@ -127,6 +198,17 @@ export default function ImageEditor({ file, onApply, onCancel }) {
   }
 
   const rotate = (delta) => setRotation((r) => (r + delta + 360) % 360);
+
+  const handlePositions = [
+    { key: 'nw', style: { left: -6, top: -6 }, cursor: 'nwse-resize' },
+    { key: 'ne', style: { right: -6, top: -6 }, cursor: 'nesw-resize' },
+    { key: 'sw', style: { left: -6, bottom: -6 }, cursor: 'nesw-resize' },
+    { key: 'se', style: { right: -6, bottom: -6 }, cursor: 'nwse-resize' },
+    { key: 'n', style: { left: '50%', top: -6, transform: 'translateX(-50%)' }, cursor: 'ns-resize' },
+    { key: 's', style: { left: '50%', bottom: -6, transform: 'translateX(-50%)' }, cursor: 'ns-resize' },
+    { key: 'w', style: { left: -6, top: '50%', transform: 'translateY(-50%)' }, cursor: 'ew-resize' },
+    { key: 'e', style: { right: -6, top: '50%', transform: 'translateY(-50%)' }, cursor: 'ew-resize' },
+  ];
 
   return (
     <div className="img-editor-overlay" onClick={onCancel}>
@@ -178,7 +260,23 @@ export default function ImageEditor({ file, onApply, onCancel }) {
                 onMouseDown={onBoxMouseDown}
               >
                 <div className="img-editor-crop-grid" />
-                <div className="img-editor-handle" onMouseDown={onHandleMouseDown} />
+                {/* 1:1 模式只保留右下角缩放；自由模式启用四角 + 四边 */}
+                {mode === 'free'
+                  ? handlePositions.map((h) => (
+                      <div
+                        key={h.key}
+                        className={`img-editor-handle img-editor-handle--${h.key}`}
+                        style={{ ...h.style, cursor: h.cursor }}
+                        onMouseDown={startResize(h.key)}
+                      />
+                    ))
+                  : (
+                      <div
+                        className="img-editor-handle img-editor-handle--se"
+                        style={{ right: -6, bottom: -6, cursor: 'nwse-resize' }}
+                        onMouseDown={startResize('se')}
+                      />
+                    )}
               </div>
             </div>
           )}
