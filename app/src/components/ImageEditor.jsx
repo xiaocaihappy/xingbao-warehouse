@@ -14,12 +14,15 @@ export default function ImageEditor({ file, onApply, onCancel }) {
   const [rotation, setRotation] = useState(0);
   const [crop, setCrop] = useState({ x: 0, y: 0, w: 0, h: 0 });
   const [busy, setBusy] = useState(false);
+  const [objectUrl, setObjectUrl] = useState(null);
   const stageRef = useRef(null);
   const dragRef = useRef(null);
 
-  // 初始化图片与默认裁切框
+  // 初始化图片与默认裁切框；单独维护 objectURL 用于显示，避免 fileToImage 立即 revoke 后裂图
   useEffect(() => {
     let alive = true;
+    const url = URL.createObjectURL(file);
+    setObjectUrl(url);
     fileToImage(file).then((image) => {
       if (!alive) return;
       const w = image.naturalWidth;
@@ -31,7 +34,10 @@ export default function ImageEditor({ file, onApply, onCancel }) {
       setDisp({ w: dw, h: dh });
       setCrop(initCrop(mode, dw, dh));
     }).catch(() => {});
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+      URL.revokeObjectURL(url);
+    };
     // 仅依赖 file
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
@@ -165,7 +171,7 @@ export default function ImageEditor({ file, onApply, onCancel }) {
                 transform: `rotate(${rotation}deg)`,
               }}
             >
-              {img && <img src={img.src} alt="" className="img-editor-img" draggable={false} />}
+              {img && objectUrl && <img src={objectUrl} alt="" className="img-editor-img" draggable={false} />}
               <div
                 className="img-editor-crop"
                 style={{ left: crop.x, top: crop.y, width: crop.w, height: crop.h }}
