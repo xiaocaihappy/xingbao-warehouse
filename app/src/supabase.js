@@ -114,9 +114,9 @@ export async function fetchItems(filters = {}) {
     let query = supabase
       .from(TABLE_NAME)
       .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(from, to);
+      .order('created_at', { ascending: false });
     query = applyCommon(query);
+    query = query.range(from, to);
     const { data, error, count } = await query;
     return { data: data || [], count: count ?? 0, error };
   }

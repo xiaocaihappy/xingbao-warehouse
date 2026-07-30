@@ -14,7 +14,7 @@ import {
   setCachedPage,
   getCachedOptions,
   setCachedOptions,
-  matchesFilters,
+  invalidateByFilters,
 } from '../utils/queryCache';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
@@ -172,40 +172,13 @@ export default function Query({ onStatsChange }) {
   }, []);
 
   function applyRealtime(payload) {
-    const { eventType, new: newRow, old: oldRow } = payload;
-    const row = newRow || oldRow;
+    const row = payload?.new || payload?.old;
     if (!row) return;
     const f = filtersRef.current;
-    const cur = itemsRef.current;
-    const before = matchesFilters(oldRow, f);
-    const after = matchesFilters(newRow, f);
-    let next = [...cur];
-    let delta = 0;
-    if (eventType === 'DELETE') {
-      next = next.filter((r) => r.id !== row.id);
-      delta = -1;
-    } else if (eventType === 'INSERT') {
-      if (after) {
-        if (!next.find((r) => r.id === row.id)) next = [row, ...next];
-        delta = 1;
-      } else {
-        next = next.filter((r) => r.id !== row.id);
-      }
-    } else if (eventType === 'UPDATE') {
-      if (after) {
-        const idx = next.findIndex((r) => r.id === row.id);
-        if (idx >= 0) next[idx] = row;
-        else next = [row, ...next];
-      } else {
-        next = next.filter((r) => r.id !== row.id);
-      }
-      delta = (after ? 1 : 0) - (before ? 1 : 0);
-    }
-    next = next.slice(0, PAGE_SIZE);
-    const newCount = (totalCountRef.current || 0) + delta;
-    setItems(next);
-    setTotalCount(newCount);
-    setCachedPage(f, pageRef.current, next, newCount);
+    // 增量更新的本地 delta 计算容易把 totalCount 算错（跨页/排序变化）。
+    // 直接使当前筛选条件的缓存失效，并重新拉取当前页，确保总数与数据库一致。
+    invalidateByFilters(f);
+    loadItems(f, pageRef.current);
     refreshFilterOptions();
   }
 

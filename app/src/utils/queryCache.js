@@ -27,6 +27,15 @@ export function clearPageCache() {
   pageCache.clear();
 }
 
+// 失效某一筛选条件下的所有页缓存（实时变更后确保总数/分页一致）
+export function invalidateByFilters(filters) {
+  const f = filters || {};
+  const prefix = `${f.search || ''}|${f.sales_channel || ''}|${f.year || ''}|p`;
+  for (const key of pageCache.keys()) {
+    if (key.startsWith(prefix)) pageCache.delete(key);
+  }
+}
+
 export function getCachedOptions() {
   return optionsCache;
 }
