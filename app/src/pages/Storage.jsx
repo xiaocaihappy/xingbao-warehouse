@@ -752,6 +752,8 @@ export default function Storage({ isGuest, onStatsChange, onBackHome }) {
               required
               accent="purple"
               externalTriggerRef={fieldRefs.staff_name}
+              allowAdd={false}
+              allowDelete={false}
               disabled={readOnly}
             />
             <span
@@ -870,6 +872,9 @@ export default function Storage({ isGuest, onStatsChange, onBackHome }) {
               showToast(error.message || '添加失败', 'error');
               return false;
             }
+            // 重新拉取最新人员列表，确保下拉与选项同步刷新
+            const { data } = await fetchStaffList();
+            if (data) setStaffList(data);
             showToast('✓ 已添加人员', 'success');
             return true;
           }}
@@ -879,6 +884,9 @@ export default function Storage({ isGuest, onStatsChange, onBackHome }) {
               showToast(error.message || '删除失败', 'error');
               return false;
             }
+            // 重新拉取最新人员列表，确保下拉与选项同步刷新
+            const { data } = await fetchStaffList();
+            if (data) setStaffList(data);
             showToast('✓ 已删除人员', 'success');
             return true;
           }}

@@ -25,6 +25,8 @@ export default function SelectField({
   accent = 'blue',
   externalTriggerRef,
   onAfterSelect,
+  allowAdd = true,
+  allowDelete = true,
   disabled = false,
 }) {
   const [open, setOpen] = useState(false);
@@ -189,7 +191,7 @@ export default function SelectField({
                   onClick={(e) => { e.stopPropagation(); handleSelect(opt); }}
                 >
                   <span className="select-field-option-text">{opt}</span>
-                  {isCustom && (
+                  {isCustom && allowDelete && (
                     <button
                       className="select-field-delete-btn"
                       onClick={(e) => { e.stopPropagation(); handleDelete(opt); }}
@@ -205,7 +207,7 @@ export default function SelectField({
           </div>
 
           {/* 新增选项区域 */}
-          {adding ? (
+          {allowAdd && (adding ? (
             <div className="select-field-add-row" onClick={e => e.stopPropagation()}>
               <input
                 ref={addInputRef}
@@ -240,7 +242,7 @@ export default function SelectField({
             >
               + 新增选项
             </div>
-          )}
+          ))}
         </div>,
         document.body
       )}
