@@ -5,7 +5,7 @@ const SAVED_EMAIL_KEY = "xingbao_saved_email";
 const DISPLAY_NAME_KEY = "xingbao_display_name";
 
 export default function Login() {
-  const { signIn, signUp, resetPassword } = useAuth();
+  const { signIn, signUp, resetPassword, guestLogin } = useAuth();
 
   const [isRegister, setIsRegister] = useState(false);
   const [isResetPassword, setIsResetPassword] = useState(false);
@@ -176,6 +176,18 @@ export default function Login() {
                   />
                   记住账号
                 </label>
+              )}
+
+              {/* 游客登录：免认证只读进入 */}
+              {!isRegister && !isResetPassword && (
+                <button
+                  type="button"
+                  className="btn btn-ghost-guest"
+                  onClick={() => guestLogin()}
+                  title="无需账号即可进入，仅可查看、查询与导出，不能存储或修改数据"
+                >
+                  👁 游客登录（只读）
+                </button>
               )}
             </>
           )}

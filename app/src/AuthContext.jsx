@@ -10,6 +10,7 @@ import {
   signOut as supabaseSignOut,
   resetPassword as supabaseResetPassword,
   updatePassword as supabaseUpdatePassword,
+  setClientRole,
 } from "./supabase";
 
 const AuthContext = createContext(null);
@@ -19,6 +20,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [configError, setConfigError] = useState(SUPABASE_CONFIG_ERROR);
+  const [isGuest, setIsGuest] = useState(false);
 
   const refreshUser = useCallback(async () => {
     if (!supabase) return null;
@@ -84,6 +86,20 @@ export function AuthProvider({ children }) {
     await supabaseSignOut();
     setUser(null);
     setSession(null);
+    setIsGuest(false);
+    setClientRole('authenticated');
+  }, []);
+
+  // 游客登录：无需认证即可进入主界面，但只有只读权限
+  const guestLogin = useCallback(() => {
+    setIsGuest(true);
+    setClientRole('guest');
+    setUser({
+      id: 'guest',
+      email: null,
+      isGuest: true,
+      user_metadata: { username: '游客' },
+    });
   }, []);
 
   const resetPassword = useCallback(async (email) => {
@@ -101,9 +117,11 @@ export function AuthProvider({ children }) {
         session,
         loading,
         configError,
+        isGuest,
         signIn,
         signUp,
         signOut,
+        guestLogin,
         resetPassword,
         updatePassword,
         refreshUser,

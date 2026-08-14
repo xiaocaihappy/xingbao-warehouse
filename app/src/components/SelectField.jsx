@@ -25,6 +25,7 @@ export default function SelectField({
   accent = 'blue',
   externalTriggerRef,
   onAfterSelect,
+  disabled = false,
 }) {
   const [open, setOpen] = useState(false);
   const [internalOptions, setInternalOptions] = useState(defaultOptions);
@@ -154,10 +155,10 @@ export default function SelectField({
 
       <div
         ref={(el) => { triggerRef.current = el; if (externalTriggerRef) externalTriggerRef.current = el; }}
-        className={`select-field-trigger ${open ? 'select-field-open' : ''} ${value ? 'select-field-has-value' : ''}`}
-        onClick={() => { setOpen(!open); setAdding(false); }}
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } }}
+        className={`select-field-trigger ${open ? 'select-field-open' : ''} ${value ? 'select-field-has-value' : ''} ${disabled ? 'select-field-disabled' : ''}`}
+        onClick={() => { if (disabled) return; setOpen(!open); setAdding(false); }}
+        tabIndex={disabled ? -1 : 0}
+        onKeyDown={(e) => { if (disabled) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } }}
       >
         <span className={`select-field-value ${!value ? 'select-field-placeholder' : ''}`}>
           {displayText}

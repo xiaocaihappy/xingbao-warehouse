@@ -282,6 +282,27 @@ body::after {
   box-shadow: none;
 }
 
+.btn-ghost-guest {
+  width: 100%;
+  margin-top: 12px;
+  padding: 11px 16px;
+  background: transparent;
+  border: 1px dashed hsl(var(--border));
+  border-radius: var(--radius-sm, 10px);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-ghost-guest:hover {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+  background: var(--glass-bg);
+  box-shadow: 0 0 18px rgba(0, 200, 255, 0.12);
+}
+
 .btn-outline {
   background: transparent;
   border: 1px solid hsl(var(--border));
@@ -517,6 +538,19 @@ body::after {
 .user-email {
   font-size: 11px;
   color: hsl(215, 15%, 55%);
+}
+
+.guest-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  vertical-align: middle;
 }
 
 .main-content {
@@ -1446,6 +1480,12 @@ tr:hover td {
   cursor: pointer;
   user-select: none;
   min-height: 28px;
+}
+
+.select-field-trigger.select-field-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .select-field-value {
@@ -2632,6 +2672,19 @@ body.theme-light {
 @keyframes stgPageIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* ---- 游客只读模式横幅 ---- */
+.stg-readonly-banner {
+  margin: 0 0 16px;
+  padding: 11px 16px;
+  border-radius: var(--radius-sm, 10px);
+  font-size: 13px;
+  font-weight: 500;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  backdrop-filter: blur(10px);
 }
 
 /* ---- Background Grid ---- */

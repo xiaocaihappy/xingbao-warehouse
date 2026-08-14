@@ -60,7 +60,7 @@ function clearFieldHistory(fieldKey) {
 }
 
 // 带历史记录的下拉输入框组件（Portal 渲染，解决层级穿透问题）
-function HistoryInput({ value, onChange, placeholder, fieldKey, inputRef, onEnter }) {
+function HistoryInput({ value, onChange, placeholder, fieldKey, inputRef, onEnter, disabled = false }) {
   const [open, setOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const triggerRef = useRef(null);
@@ -110,9 +110,11 @@ function HistoryInput({ value, onChange, placeholder, fieldKey, inputRef, onEnte
         className="stg-field-input"
         value={value}
         ref={inputRef}
+        disabled={disabled}
         onChange={e => onChange(e.target.value)}
-        onFocus={() => history.length > 0 && setOpen(true)}
+        onFocus={() => !disabled && history.length > 0 && setOpen(true)}
         onKeyDown={(e) => {
+          if (disabled) return;
           if (e.key === 'Enter') {
             e.preventDefault();
             setOpen(false);
@@ -199,7 +201,8 @@ const FIELD_LABELS = {
   staff_name: '仓储人员',
 };
 
-export default function Storage({ onStatsChange, onBackHome }) {
+export default function Storage({ isGuest, onStatsChange, onBackHome }) {
+  const readOnly = !!isGuest;
   const [form, setForm] = useState(() => {
     const displayName = localStorage.getItem('xingbao_display_name')?.trim();
     const base = getInitialStaff().includes(displayName)
@@ -375,6 +378,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
 
   // 选/拖图片 → 压缩 → 打开编辑器（裁剪/旋转）
   function openEditorWithFile(file) {
+    if (readOnly) return;
     if (!file) return;
     if (!file.type || !file.type.startsWith('image/')) {
       showToast('请选择图片文件', 'error');
@@ -426,6 +430,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
 
   // Excel 导入（按模板列名映射，并同步上传内嵌图片到数据库）
   async function handleExcelImport(e) {
+    if (readOnly) return;
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
@@ -571,6 +576,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
   }
 
   async function handleSave(e) {
+    if (readOnly) return;
     e?.preventDefault?.();
     if (!form.shelf_number || !form.stamp_code) {
       showToast('请填写货架号（第几列）和移印编号', 'error');
@@ -611,6 +617,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
   }
 
   function handleReset() {
+    if (readOnly) return;
     setForm({ ...INITIAL_FORM });
     showToast('已重置工单', 'success');
     onBackHome?.();
@@ -626,14 +633,20 @@ export default function Storage({ onStatsChange, onBackHome }) {
       {toast && <div className={`stg-toast stg-toast--${toast.type}`}>{toast.msg}</div>}
       <div className="stg-page">
 
+      {readOnly && (
+        <div className="stg-readonly-banner">
+          👁 游客只读模式：可查看样品信息，但无法录入、导入、编辑或删除数据。
+        </div>
+      )}
+
       {/* ===== Top Bar ===== */}
       <div className="stg-topbar">
         <button className="stg-btn-back" onClick={handleReset} title="返回首页">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
           <span>返回首页</span>
         </button>
-        <input ref={excelRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelImport} style={{ display: 'none' }} />
-        <button className="stg-btn-import" onClick={() => excelRef.current?.click()} disabled={importing}>
+        <input ref={excelRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelImport} style={{ display: 'none' }} disabled={readOnly} />
+        <button className="stg-btn-import" onClick={() => excelRef.current?.click()} disabled={importing || readOnly}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
           <span>{importing ? '导入中...' : '导入 Excel'}</span>
         </button>
@@ -668,6 +681,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
                   fieldKey={field.key}
                   inputRef={fieldRefs[field.key]}
                   onEnter={() => focusNextField(field.key)}
+                  disabled={readOnly}
                 />
               ) : (
                 <div className="stg-field-input-wrap">
@@ -701,6 +715,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
                 placeholder="可填写备注信息（选填）"
                 maxLength={500}
                 rows={2}
+                disabled={readOnly}
               />
             </div>
           </div>
@@ -719,6 +734,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
               accent="cyan"
               externalTriggerRef={fieldRefs.sales_channel}
               onAfterSelect={() => focusNextField('sales_channel')}
+              disabled={readOnly}
             />
           </div>
 
@@ -736,11 +752,13 @@ export default function Storage({ onStatsChange, onBackHome }) {
               required
               accent="purple"
               externalTriggerRef={fieldRefs.staff_name}
+              disabled={readOnly}
             />
             <span
               className="stg-badge"
-              onClick={(e) => { e.stopPropagation(); setShowStaffModal(true); }}
-              title="管理人员"
+              onClick={(e) => { if (readOnly) return; e.stopPropagation(); setShowStaffModal(true); }}
+              title={readOnly ? '游客模式下不可管理人员' : '管理人员'}
+              style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               管理人员
@@ -750,7 +768,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
           {/* 上传图片 */}
           <div className={`stg-field stg-field--cyan stg-stagger`} style={{ animationDelay: `${0.08 + 6 * 0.05}s` }}>
             <label className="stg-field-label">上传图片</label>
-            <input ref={fileRef} type="file" accept="image/*" onChange={handleFilePick} style={{ display: 'none' }} />
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleFilePick} style={{ display: 'none' }} disabled={readOnly} />
             {(form.image_url || localPreview) ? (
               <div className="stg-upload-row">
                 <div
@@ -759,6 +777,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   title="可拖拽新图片到此替换"
+                  style={readOnly ? { pointerEvents: 'none' } : undefined}
                 >
                   <img src={localPreview || form.image_url} alt="样品预览" className="stg-upload-img" />
                   {uploading && <div className="stg-upload-loading-badge">⏳ 上传中</div>}
@@ -767,7 +786,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
                   </button>
                 </div>
                 <div className="stg-upload-side">
-                  <button type="button" className="stg-upload-change" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                  <button type="button" className="stg-upload-change" onClick={() => fileRef.current?.click()} disabled={uploading || readOnly}>
                     {uploading ? '⏳ 上传中...' : '📷 更换图片'}
                   </button>
                   {uploading && <span className="stg-upload-hint">图片后台上传中，保存时会自动等待完成</span>}
@@ -777,11 +796,11 @@ export default function Storage({ onStatsChange, onBackHome }) {
               <button
                 type="button"
                 className={`stg-upload-btn ${dragOver ? 'stg-upload-btn--drag' : ''} ${uploading ? 'stg-upload-btn--loading' : ''}`}
-                onClick={() => !uploading && fileRef.current?.click()}
+                onClick={() => !uploading && !readOnly && fileRef.current?.click()}
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                disabled={uploading}
+                disabled={uploading || readOnly}
               >
                 {uploading ? (
                   <><span className="stg-upload-spinner" />正在上传...</>
@@ -801,14 +820,14 @@ export default function Storage({ onStatsChange, onBackHome }) {
 
           {/* 底部按钮 */}
           <div className="stg-actions">
-            <button className="stg-btn stg-btn--save" onClick={handleSave} disabled={loading}>
+            <button className="stg-btn stg-btn--save" onClick={handleSave} disabled={loading || readOnly}>
               {loading ? (
                 <><span className="stg-btn-spinner" />保存中...</>
               ) : (
                 <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>保存数据</span></>
               )}
             </button>
-            <button className="stg-btn stg-btn--reset" onClick={handleReset} disabled={loading}>
+            <button className="stg-btn stg-btn--reset" onClick={handleReset} disabled={loading || readOnly}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
               <span>重置工单</span>
             </button>

@@ -8,7 +8,8 @@ const THEME_PRESETS = [
 const THEME_KEY = 'xingbao_theme';
 const DISPLAY_NAME_KEY = 'xingbao_display_name';
 
-export default function Settings({ user, onLogout, onSwitchAccount }) {
+export default function Settings({ user, isGuest, onLogout, onSwitchAccount }) {
+  const readOnly = !!isGuest;
   const [displayName, setDisplayName] = useState(
     () => localStorage.getItem(DISPLAY_NAME_KEY) || user?.user_metadata?.display_name || ''
   );
@@ -106,6 +107,7 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
 
 
   function handleSaveNickname() {
+    if (readOnly) return;
     const trimmed = displayName.trim();
     if (!trimmed) {
       showToast('昵称不能为空', 'error');
@@ -146,6 +148,7 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
   }
 
   async function handleSaveExportDir() {
+    if (readOnly) return;
     if (!window.electronAPI?.setExportConfig) {
       showToast('仅桌面端支持导出路径设置', 'error');
       return;
@@ -193,7 +196,8 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
             <button
               className={`btn btn-primary-glow btn-sm ${nicknameSaved ? 'btn-saved' : ''}`}
               onClick={handleSaveNickname}
-              disabled={!displayName.trim()}
+              disabled={!displayName.trim() || readOnly}
+              title={readOnly ? '游客模式下不可修改' : undefined}
             >
               {nicknameSaved ? '✓ 已保存' : '保存'}
             </button>
@@ -327,10 +331,13 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
                 onChange={(e) => { setExportDir(e.target.value); setExportSaved(false); }}
                 placeholder="留空则每次弹出选择窗口，或填入如 D:\Export"
                 style={{ flex: 1 }}
+                disabled={readOnly}
               />
               <button
                 className={`btn btn-primary-glow btn-sm ${exportSaved ? 'btn-saved' : ''}`}
                 onClick={handleSaveExportDir}
+                disabled={readOnly}
+                title={readOnly ? '游客模式下不可修改' : undefined}
               >
                 {exportSaved ? '✓ 已保存' : '保存'}
               </button>

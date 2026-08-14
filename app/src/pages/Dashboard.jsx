@@ -5,7 +5,7 @@ import Storage from './Storage';
 import Settings from './Settings';
 import UpdateNotifier from '../components/UpdateNotifier';
 
-export default function Dashboard({ user, onLogout }) {
+export default function Dashboard({ user, isGuest, onLogout }) {
   const [currentPage, setCurrentPage] = useState('home');
   const [stats, setStats] = useState({ total: 0, channels: [] });
   const [showSettings, setShowSettings] = useState(false);
@@ -74,13 +74,14 @@ export default function Dashboard({ user, onLogout }) {
         <div className="sidebar-footer">
           <div className="user-info">
             <div className="user-avatar">
-              {(user?.user_metadata?.username || user?.email || '?')[0].toUpperCase()}
+              {(user?.user_metadata?.username || user?.email || '游')[0].toUpperCase()}
             </div>
             <div>
               <div className="user-name">
                 {user?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}
+                {isGuest && <span className="guest-badge">游客</span>}
               </div>
-              <div className="user-email">{user?.email}</div>
+              <div className="user-email">{isGuest ? '只读模式 · 不可修改数据' : (user?.email || '')}</div>
             </div>
           </div>
           <button className="btn btn-outline btn-sm" style={{ width: '100%', color: '#fff', borderColor: 'rgba(255,255,255,0.2)' }} onClick={onLogout}>
@@ -101,13 +102,14 @@ export default function Dashboard({ user, onLogout }) {
           {showSettings && (
             <Settings
               user={user}
+              isGuest={isGuest}
               onLogout={onLogout}
               onSwitchAccount={() => { onLogout(); }}
             />
           )}
           {!showSettings && currentPage === 'home' && <HomePage stats={stats} onNavigate={setCurrentPage} />}
-          {!showSettings && currentPage === 'query' && <Query onStatsChange={loadStats} />}
-          {!showSettings && currentPage === 'storage' && <Storage onStatsChange={loadStats} onBackHome={() => setCurrentPage('home')} />}
+          {!showSettings && currentPage === 'query' && <Query isGuest={isGuest} onStatsChange={loadStats} />}
+          {!showSettings && currentPage === 'storage' && <Storage isGuest={isGuest} onStatsChange={loadStats} onBackHome={() => setCurrentPage('home')} />}
         </div>
       </div>
 

@@ -24,7 +24,8 @@ import { compressImage, urlToBlob } from '../utils/imageUtils';
 
 const PAGE_SIZE = 12;
 
-export default function Query({ onStatsChange }) {
+export default function Query({ isGuest, onStatsChange }) {
+  const readOnly = !!isGuest;
   const [items, setItems] = useState([]); // 当前页数据（最多 PAGE_SIZE 行）
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -197,6 +198,7 @@ export default function Query({ onStatsChange }) {
 
   // 删除
   async function handleDelete(id) {
+    if (readOnly) return;
     if (!confirm('确定删除该记录？此操作不可撤销。')) return;
     const { error: err } = await deleteItem(id);
     if (!err) { showToast('已删除', 'success'); loadItems(filtersRef.current, pageRef.current); onStatsChange?.(); }
@@ -204,6 +206,7 @@ export default function Query({ onStatsChange }) {
   }
 
   async function handleBatchDelete() {
+    if (readOnly) return;
     if (selectedIds.size === 0) { showToast('请先选择要删除的记录', 'error'); return; }
     if (!confirm(`确定删除选中的 ${selectedIds.size} 条记录？此操作不可撤销。`)) return;
     let failed = 0;
@@ -220,6 +223,7 @@ export default function Query({ onStatsChange }) {
 
   // 编辑
   async function handleEdit() {
+    if (readOnly) return;
     const { id, ...updates } = editModal;
     // 若有图片正在后台上传，先等待完成，避免存到不完整的图片
     const url = await uploader.awaitPending();
@@ -231,6 +235,7 @@ export default function Query({ onStatsChange }) {
 
   // 选/拖图片 → 压缩 → 打开编辑器（裁剪/旋转）
   function openEditorWithFile(file) {
+    if (readOnly) return;
     if (!file) return;
     if (!file.type || !file.type.startsWith('image/')) { showToast('请选择图片文件', 'error'); return; }
     if (file.size > 15 * 1024 * 1024) { showToast('图片大小不能超过 15MB', 'error'); return; }
@@ -258,6 +263,7 @@ export default function Query({ onStatsChange }) {
   }
   // 编辑当前已有图片：下载为 Blob 后打开编辑器
   async function openExistingImageEditor() {
+    if (readOnly) return;
     const url = uploader.localPreview || editModal?.image_url;
     if (!url || url === 'EMPTY') return;
     try {
@@ -417,7 +423,8 @@ export default function Query({ onStatsChange }) {
           className="btn btn-sm"
           style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', marginLeft: 'auto' }}
           onClick={handleBatchDelete}
-          disabled={selectedIds.size === 0}
+          disabled={selectedIds.size === 0 || readOnly}
+          title={readOnly ? '游客模式下不可删除' : '删除选中项'}
         >
           🗑 删除选中 ({selectedIds.size})
         </button>
@@ -498,8 +505,8 @@ export default function Query({ onStatsChange }) {
                       <td className="cell-remarks">{item.remarks || '-'}</td>
                       <td className="cell-time">{item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : '-'}</td>
                       <td>
-                        <button className="btn btn-outline btn-xs" onClick={() => openEditModal(item)}>编辑</button>
-                        <button className="btn btn-ghost-danger btn-xs" onClick={() => handleDelete(item.id)}>删除</button>
+                        <button className="btn btn-outline btn-xs" onClick={() => openEditModal(item)} disabled={readOnly} title={readOnly ? '游客模式下不可编辑' : '编辑'}>编辑</button>
+                        <button className="btn btn-ghost-danger btn-xs" onClick={() => handleDelete(item.id)} disabled={readOnly} title={readOnly ? '游客模式下不可删除' : '删除'}>删除</button>
                       </td>
                     </tr>
                   ))}
@@ -633,7 +640,7 @@ export default function Query({ onStatsChange }) {
             </div>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={closeEditModal}>取消</button>
-              <button className="btn btn-primary-glow" onClick={handleEdit}>保存修改</button>
+              <button className="btn btn-primary-glow" onClick={handleEdit} disabled={readOnly}>保存修改</button>
             </div>
           </div>
         </div>

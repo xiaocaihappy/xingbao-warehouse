@@ -49,6 +49,25 @@ export const supabase = SUPABASE_CONFIG_ERROR
 
 const TABLE_NAME = 'storage_items';
 
+// ============================================================
+// 客户端角色（游客只读模式守卫）
+// 'authenticated' = 已登录用户，可读写；'guest' = 游客，仅只读
+// 由 AuthContext 在登录 / 游客登录 / 登出 时调用 setClientRole 同步。
+// 这是纵深防御：即使 UI 被绕过，游客也无法写入数据库。
+// ============================================================
+let _clientRole = 'authenticated';
+
+export function setClientRole(role) {
+  _clientRole = role === 'guest' ? 'guest' : 'authenticated';
+}
+
+function assertWritable() {
+  if (_clientRole === 'guest') {
+    return { error: { message: '游客模式下不可修改数据' } };
+  }
+  return null;
+}
+
 // 用户认证
 export async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -162,11 +181,15 @@ export async function fetchFilterOptions() {
 }
 
 export async function insertItem(item) {
+  const guard = assertWritable();
+  if (guard) return guard;
   const { data, error } = await supabase.from(TABLE_NAME).insert([item]).select();
   return { data, error };
 }
 
 export async function updateItem(id, updates) {
+  const guard = assertWritable();
+  if (guard) return guard;
   const { data, error } = await supabase
     .from(TABLE_NAME)
     .update({ ...updates, updated_at: new Date().toISOString() })
@@ -176,11 +199,15 @@ export async function updateItem(id, updates) {
 }
 
 export async function deleteItem(id) {
+  const guard = assertWritable();
+  if (guard) return guard;
   const { error } = await supabase.from(TABLE_NAME).delete().eq('id', id);
   return { error };
 }
 
 export async function uploadImage(file) {
+  const guard = assertWritable();
+  if (guard) return guard;
   const fileExt = file.name.split('.').pop();
   const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
   const { data, error } = await supabase.storage
@@ -201,6 +228,8 @@ export async function uploadImage(file) {
 }
 
 export async function deleteImage(url) {
+  const guard = assertWritable();
+  if (guard) return guard;
   const path = url.split('/').pop();
   if (!path) return { error: null };
   const { error } = await supabase.storage
@@ -237,6 +266,8 @@ export async function fetchStaffList() {
 
 // 添加人员（去重）
 export async function addStaffMember(name) {
+  const guard = assertWritable();
+  if (guard) return guard;
   const trimmed = String(name || '').trim();
   if (!trimmed) return { data: null, error: { message: '姓名不能为空' } };
   // 先检查是否已存在
@@ -258,6 +289,8 @@ export async function addStaffMember(name) {
 
 // 删除人员
 export async function deleteStaffMember(id) {
+  const guard = assertWritable();
+  if (guard) return guard;
   const { error } = await supabase
     .from(STAFF_TABLE)
     .delete()
@@ -267,6 +300,7 @@ export async function deleteStaffMember(id) {
 
 // 初始化默认人员（仅当表为空时）
 export async function seedDefaultStaff(defaultNames = []) {
+  if (_clientRole === 'guest') return; // 游客模式下不写入默认人员
   if (!defaultNames.length) return;
   const { data: existing } = await supabase
     .from(STAFF_TABLE)

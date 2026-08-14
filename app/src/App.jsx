@@ -181,7 +181,7 @@ function AppLoader() {
 
 // ===== 应用内容：根据 Auth 状态切换登录/主界面 =====
 function AppContent() {
-  const { user, loading, configError, signOut } = useAuth();
+  const { user, loading, configError, isGuest, signOut } = useAuth();
   const [showCloseDialog, setShowCloseDialog] = useState(false);
 
   // 全局关闭请求监听
@@ -219,6 +219,7 @@ function AppContent() {
       {user ? (
         <Dashboard
           user={user}
+          isGuest={isGuest}
           onLogout={async () => {
             await signOut();
           }}
