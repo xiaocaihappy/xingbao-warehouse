@@ -297,6 +297,7 @@ export default function Query({ onStatsChange }) {
       grid_number: i.grid_number,
       product_code: i.product_code,
       image_url: i.image_url,
+      remarks: i.remarks,
       created_at: i.created_at,
     }));
 
@@ -347,8 +348,8 @@ export default function Query({ onStatsChange }) {
     const all = Array.isArray(data) ? data : [];
     const selected = all.filter((i) => selectedIds.has(i.id));
     if (selected.length === 0) { showToast('所选记录不在当前筛选范围内', 'error'); return; }
-    const headers = ['货架号', '移印编号', '销售', '人员', '格子号', '产品货号'];
-    const rows = selected.map((i) => [i.shelf_number, i.stamp_code, i.sales_channel, i.staff_name, i.grid_number, i.product_code]);
+    const headers = ['货架号', '移印编号', '销售', '人员', '格子号', '产品货号', '备注'];
+    const rows = selected.map((i) => [i.shelf_number, i.stamp_code, i.sales_channel, i.staff_name, i.grid_number, i.product_code, i.remarks]);
     const csv = [headers.join(','), ...rows.map((r) => r.map((v) => `"${String(v || '').replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -459,6 +460,7 @@ export default function Query({ onStatsChange }) {
                     <th style={{ width: 80 }}>图片</th>
                     <th>销售</th>
                     <th>人员</th>
+                    <th style={{ width: 200 }}>备注</th>
                     <th>创建时间</th>
                     <th style={{ width: 130 }}>操作</th>
                   </tr>
@@ -499,6 +501,7 @@ export default function Query({ onStatsChange }) {
                         </span>
                       </td>
                       <td>{item.staff_name || '-'}</td>
+                      <td className="cell-remarks">{item.remarks || '-'}</td>
                       <td className="cell-time">{item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : '-'}</td>
                       <td>
                         <button className="btn btn-outline btn-xs" onClick={() => openEditModal(item)}>编辑</button>
@@ -581,6 +584,10 @@ export default function Query({ onStatsChange }) {
               <div className="form-group">
                 <label>产品货号</label>
                 <input type="text" value={editModal.product_code || ''} onChange={(e) => setEditModal({ ...editModal, product_code: e.target.value })} />
+              </div>
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label>备注</label>
+                <textarea value={editModal.remarks || ''} onChange={(e) => setEditModal({ ...editModal, remarks: e.target.value })} placeholder="可填写备注信息（选填）" />
               </div>
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                 <label>样品图片</label>

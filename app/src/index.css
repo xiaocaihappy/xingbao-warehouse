@@ -1896,6 +1896,16 @@ tr:hover td {
   white-space: nowrap;
 }
 
+/* 备注列：超过约 15 个字符自动换行（CJK 13px 计，约 200px 宽） */
+.cell-remarks {
+  max-width: 200px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  vertical-align: top;
+}
+
 .no-image {
   width: 42px;
   height: 42px;
@@ -2887,6 +2897,12 @@ body.theme-light {
   border-color: #00c8ff;
   background: rgba(15, 25, 45, 0.8);
   box-shadow: 0 0 0 3px rgba(0, 200, 255, 0.1), 0 0 20px rgba(0, 200, 255, 0.15);
+}
+.stg-field-textarea {
+  min-height: 64px;
+  max-height: 160px;
+  resize: vertical;
+  line-height: 1.5;
 }
 
 /* ---- Field with Badge (管理人员) ---- */

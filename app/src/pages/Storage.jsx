@@ -18,6 +18,7 @@ const INITIAL_FORM = {
   stamp_code: '',
   sales_channel: '',
   staff_name: '',
+  remarks: '',
   image_url: '',
 };
 
@@ -457,6 +458,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
         stamp: colIndex(['移印编号', '印章编号', 'stamp_code']),
         channel: colIndex(['销售列', '销售', '销售渠道', 'sales_channel']),
         staff: colIndex(['仓储人员', '人员', '人员姓名', 'staff_name']),
+        remarks: colIndex(['备注', '备注说明', 'remark', 'remarks']),
         image: colIndex(['图片', '样品图片', 'image_url', 'image']),
         time: colIndex(['创建时间', '时间', 'created_at']),
       };
@@ -477,6 +479,7 @@ export default function Storage({ onStatsChange, onBackHome }) {
           stamp_code: get('stamp'),
           sales_channel: get('channel'),
           staff_name: get('staff'),
+          remarks: get('remarks'),
           created_at: get('time') || now,
           updated_at: now,
         };
@@ -686,6 +689,21 @@ export default function Storage({ onStatsChange, onBackHome }) {
               )}
             </div>
           ))}
+
+          {/* 备注 */}
+          <div className={`stg-field stg-field--purple stg-stagger`} style={{ animationDelay: '0.4s' }}>
+            <label className="stg-field-label">备注</label>
+            <div className="stg-field-input-wrap">
+              <textarea
+                className="stg-field-input stg-field-textarea"
+                value={form.remarks}
+                onChange={(e) => updateField('remarks', e.target.value)}
+                placeholder="可填写备注信息（选填）"
+                maxLength={500}
+                rows={2}
+              />
+            </div>
+          </div>
 
           {/* 销售列 */}
           <div className="stg-stagger" style={{ animationDelay: `${0.08 + 4 * 0.05}s` }}>

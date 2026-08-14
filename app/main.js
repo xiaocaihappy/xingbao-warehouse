@@ -314,6 +314,7 @@ async function exportExcel(items) {
     { header: '人员', key: 'staff', width: 12 },
     { header: '格子号', key: 'grid', width: 10 },
     { header: '产品货号', key: 'product', width: 20 },
+    { header: '备注', key: 'remarks', width: 24 },
     { header: '图片', key: 'image', width: 22 },
     { header: '创建时间', key: 'time', width: 22 },
   ];
@@ -340,6 +341,7 @@ async function exportExcel(items) {
       staff: item.staff_name || '',
       grid: item.grid_number || '',
       product: item.product_code || '',
+      remarks: item.remarks || '',
       image: (item.image_url && item.image_url !== 'EMPTY') ? '图片加载中...' : '无图片',
       time: timeStr,
     });
