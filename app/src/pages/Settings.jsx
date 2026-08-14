@@ -6,16 +6,11 @@ const THEME_PRESETS = [
 ];
 
 const THEME_KEY = 'xingbao_theme';
-const DISPLAY_NAME_KEY = 'xingbao_display_name';
 
 export default function Settings({ user, isGuest, onLogout, onSwitchAccount }) {
   const readOnly = !!isGuest;
-  const [displayName, setDisplayName] = useState(
-    () => localStorage.getItem(DISPLAY_NAME_KEY) || user?.user_metadata?.display_name || ''
-  );
   const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
   const [activeTheme, setActiveTheme] = useState(savedTheme);
-  const [nicknameSaved, setNicknameSaved] = useState(false);
   const [updateStatus, setUpdateStatus] = useState({ event: 'idle' });
   const [toast, setToast] = useState(null);
   const [appVersion, setAppVersion] = useState('');
@@ -106,20 +101,6 @@ export default function Settings({ user, isGuest, onLogout, onSwitchAccount }) {
   }, []);
 
 
-  function handleSaveNickname() {
-    if (readOnly) return;
-    const trimmed = displayName.trim();
-    if (!trimmed) {
-      showToast('昵称不能为空', 'error');
-      return;
-    }
-    localStorage.setItem(DISPLAY_NAME_KEY, trimmed);
-    setDisplayName(trimmed);
-    setNicknameSaved(true);
-    showToast('✓ 昵称已保存', 'success');
-    setTimeout(() => setNicknameSaved(false), 2000);
-  }
-
   async function handleCheckUpdate() {
     if (!window.electronAPI?.checkForUpdates) {
       showToast('仅桌面端支持在线更新', 'error');
@@ -178,34 +159,7 @@ export default function Settings({ user, isGuest, onLogout, onSwitchAccount }) {
         <p className="header-subtitle">个性化配置 · 账户管理</p>
       </div>
 
-      {/* 1. 修改昵称 */}
-      <div className="settings-card">
-        <div className="settings-card-icon">👤</div>
-        <div className="settings-card-body">
-          <h3>用户昵称</h3>
-          <p className="settings-card-desc">修改在系统中显示的姓名，将同步至仓储人员列表</p>
-          <div className="settings-input-row">
-            <input
-              type="text"
-              className="settings-input"
-              value={displayName}
-              onChange={e => { setDisplayName(e.target.value); setNicknameSaved(false); }}
-              placeholder="请输入您的昵称"
-              maxLength={20}
-            />
-            <button
-              className={`btn btn-primary-glow btn-sm ${nicknameSaved ? 'btn-saved' : ''}`}
-              onClick={handleSaveNickname}
-              disabled={!displayName.trim() || readOnly}
-              title={readOnly ? '游客模式下不可修改' : undefined}
-            >
-              {nicknameSaved ? '✓ 已保存' : '保存'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. 版本更新 */}
+      {/* 1. 版本更新 */}
       <div className="settings-card">
         <div className="settings-card-icon">🔄</div>
         <div className="settings-card-body">
@@ -299,24 +253,7 @@ export default function Settings({ user, isGuest, onLogout, onSwitchAccount }) {
         </div>
       </div>
 
-      {/* 4. 账户管理 */}
-      <div className="settings-card">
-        <div className="settings-card-icon">🔑</div>
-        <div className="settings-card-body">
-          <h3>账户管理</h3>
-          <p className="settings-card-desc">安全退出当前账号或切换到其他账号登录系统</p>
-          <div className="settings-input-row">
-            <button className="btn btn-ghost-danger btn-sm" onClick={handleLogout}>
-              🚪 退出登录
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={handleSwitchAccount}>
-              🔄 切换账号
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. 导出设置 */}
+      {/* 3. 导出设置 */}
       {window.electronAPI?.getExportConfig && (
         <div className="settings-card">
           <div className="settings-card-icon">📁</div>
@@ -345,6 +282,23 @@ export default function Settings({ user, isGuest, onLogout, onSwitchAccount }) {
           </div>
         </div>
       )}
+
+      {/* 4. 账户管理 */}
+      <div className="settings-card">
+        <div className="settings-card-icon">🔑</div>
+        <div className="settings-card-body">
+          <h3>账户管理</h3>
+          <p className="settings-card-desc">安全退出当前账号或切换到其他账号登录系统</p>
+          <div className="settings-input-row">
+            <button className="btn btn-ghost-danger btn-sm" onClick={handleLogout}>
+              🚪 退出登录
+            </button>
+            <button className="btn btn-outline btn-sm" onClick={handleSwitchAccount}>
+              🔄 切换账号
+            </button>
+          </div>
+        </div>
+      </div>
 
     </div>
   );
