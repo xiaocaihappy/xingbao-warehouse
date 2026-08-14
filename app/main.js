@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, net } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, net, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 let updater = null;
@@ -478,13 +478,67 @@ app.whenReady().then(() => {
         }
       });
 
-      // Excel 导出（含嵌入图片）
+      // Excel 导出（含嵌入图片）——返回 buffer，由渲染进程下载
       ipcMain.handle('excel:export', async (_event, items) => {
         try {
           const result = await exportExcel(items);
           return { success: true, buffer: result };
         } catch (e) {
           console.error('[Excel] 导出失败:', e.message);
+          return { success: false, error: e.message };
+        }
+      });
+
+      // Excel 导出并保存到指定位置（弹窗选路径或用预设路径）
+      ipcMain.handle('excel:exportSave', async (_event, items) => {
+        try {
+          const buffer = await exportExcel(items);
+          const dateStr = new Date().toISOString().slice(0, 10);
+          const defaultFileName = `星堡移印样品_${dateStr}.xlsx`;
+
+          // 读取预设导出路径
+          const configPath = path.join(app.getPath('userData'), 'export-config.json');
+          let defaultPath = '';
+          try {
+            if (fs.existsSync(configPath)) {
+              const cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+              if (cfg.exportDir) defaultPath = path.join(cfg.exportDir, defaultFileName);
+            }
+          } catch {}
+
+          const { canceled, filePath } = await dialog.showSaveDialog({
+            title: '选择 Excel 导出位置',
+            defaultPath: defaultPath || defaultFileName,
+            filters: [{ name: 'Excel 文件', extensions: ['xlsx'] }],
+            properties: ['createDirectory'],
+          });
+
+          if (canceled || !filePath) return { success: false, error: 'USER_CANCELLED' };
+
+          fs.writeFileSync(filePath, buffer);
+          return { success: true, filePath };
+        } catch (e) {
+          console.error('[Excel] 导出保存失败:', e.message);
+          return { success: false, error: e.message };
+        }
+      });
+
+      // 导出路径设置：读取
+      ipcMain.handle('export:getConfig', () => {
+        const configPath = path.join(app.getPath('userData'), 'export-config.json');
+        try {
+          if (fs.existsSync(configPath)) return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        } catch {}
+        return { exportDir: '' };
+      });
+
+      // 导出路径设置：保存
+      ipcMain.handle('export:setConfig', (_event, data) => {
+        const configPath = path.join(app.getPath('userData'), 'export-config.json');
+        try {
+          fs.writeFileSync(configPath, JSON.stringify(data, null, 2), 'utf-8');
+          return { success: true };
+        } catch (e) {
           return { success: false, error: e.message };
         }
       });

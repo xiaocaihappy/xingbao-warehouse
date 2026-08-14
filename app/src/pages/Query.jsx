@@ -305,21 +305,15 @@ export default function Query({ onStatsChange }) {
     showToast(`正在生成 Excel${withImagesCount > 0 ? `（含 ${withImagesCount} 张图片）` : ''}...`, 'success');
 
     try {
-      const result = await window.electronAPI.exportExcel(items);
+      const result = await window.electronAPI.exportExcelSave(items);
       if (!result.success) {
-        showToast('Excel 生成失败: ' + (result.error || '未知错误'), 'error');
+        const errMsg = result.error || '未知错误';
+        if (errMsg === 'USER_CANCELLED') return; // 用户取消不提示
+        showToast('导出失败: ' + errMsg, 'error');
         return;
       }
 
-      const blob = new Blob([result.buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `星堡移印样品_${dateStr}.xlsx`;
-      link.click();
-
-      showToast(`已导出 ${all.length} 条数据（含图片的 .xlsx）`, 'success');
+      showToast(`已导出 ${all.length} 条数据 → ${result.filePath}`, 'success');
     } catch (e) {
       showToast('导出失败: ' + (e.message || '未知错误'), 'error');
     }

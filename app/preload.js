@@ -35,6 +35,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Excel 导出（含嵌入图片）→ 主进程生成 .xlsx
   exportExcel: (items) => ipcRenderer.invoke('excel:export', items),
+  // Excel 导出并保存到指定位置（弹窗选路径）
+  exportExcelSave: (items) => ipcRenderer.invoke('excel:exportSave', items),
+
+  // ===== 导出路径设置 =====
+  getExportConfig: () => ipcRenderer.invoke('export:getConfig'),
+  setExportConfig: (data) => ipcRenderer.invoke('export:setConfig', data),
 
   // ===== 窗口关闭 API =====
   // 监听主进程的关闭请求

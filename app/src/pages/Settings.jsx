@@ -20,6 +20,10 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
   const [appVersion, setAppVersion] = useState('');
   const unsubRef = useRef(null);
 
+  // 导出路径设置
+  const [exportDir, setExportDir] = useState('');
+  const [exportSaved, setExportSaved] = useState(false);
+
   // ===== 核心：将 HSL 变量写入 document 并同步到 splash 文件 =====
   const applyThemeVarsCore = (primaryHsl, secondaryHsl, bgHsl, accentHsl, isLight, themeId) => {
     const root = document.documentElement;
@@ -77,6 +81,15 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
     }
   }, []);
 
+  // 加载导出路径设置
+  useEffect(() => {
+    if (window.electronAPI?.getExportConfig) {
+      window.electronAPI.getExportConfig().then((cfg) => {
+        setExportDir(cfg.exportDir || '');
+      }).catch(() => {});
+    }
+  }, []);
+
   // 加载 + 监听更新状态
   useEffect(() => {
     if (window.electronAPI?.onUpdateStatus) {
@@ -130,6 +143,21 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
   function handleSwitchAccount() {
     localStorage.removeItem('xingbao_saved_email');
     onSwitchAccount?.();
+  }
+
+  async function handleSaveExportDir() {
+    if (!window.electronAPI?.setExportConfig) {
+      showToast('仅桌面端支持导出路径设置', 'error');
+      return;
+    }
+    const result = await window.electronAPI.setExportConfig({ exportDir: exportDir.trim() });
+    if (result.success) {
+      setExportSaved(true);
+      showToast('✓ 导出路径已保存，下次导出将默认使用此目录', 'success');
+      setTimeout(() => setExportSaved(false), 3000);
+    } else {
+      showToast('保存失败: ' + (result.error || '未知错误'), 'error');
+    }
   }
 
   function showToast(msg, type, duration = 3000) {
@@ -283,6 +311,33 @@ export default function Settings({ user, onLogout, onSwitchAccount }) {
           </div>
         </div>
       </div>
+
+      {/* 5. 导出设置 */}
+      {window.electronAPI?.getExportConfig && (
+        <div className="settings-card">
+          <div className="settings-card-icon">📁</div>
+          <div className="settings-card-body">
+            <h3>导出路径</h3>
+            <p className="settings-card-desc">预设 Excel 导出的默认保存目录，导出时仍可手动选择位置</p>
+            <div className="settings-input-row">
+              <input
+                type="text"
+                className="settings-input"
+                value={exportDir}
+                onChange={(e) => { setExportDir(e.target.value); setExportSaved(false); }}
+                placeholder="留空则每次弹出选择窗口，或填入如 D:\Export"
+                style={{ flex: 1 }}
+              />
+              <button
+                className={`btn btn-primary-glow btn-sm ${exportSaved ? 'btn-saved' : ''}`}
+                onClick={handleSaveExportDir}
+              >
+                {exportSaved ? '✓ 已保存' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -1841,7 +1841,7 @@ tr:hover td {
 
 .data-table th {
   padding: 14px 12px;
-  text-align: left;
+  text-align: center;
   font-size: 11px;
   font-weight: 600;
   color: hsl(var(--primary));
@@ -1857,6 +1857,7 @@ tr:hover td {
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   color: hsl(210, 15%, 85%);
   vertical-align: middle;
+  text-align: center;
 }
 
 .data-table tr:last-child td {
@@ -1882,6 +1883,9 @@ tr:hover td {
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
   font-size: 13px;
   color: hsl(var(--primary));
+  max-width: 280px;
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 
 .cell-mono {
