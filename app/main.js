@@ -398,7 +398,7 @@ async function exportExcel(items) {
 
         if (error || !buffer) {
           failed++;
-          ws.getCell(rowNum, 7).value = '⚠ 加载失败';
+          ws.getCell(rowNum, 8).value = '⚠ 加载失败';
           continue;
         }
 
@@ -409,18 +409,18 @@ async function exportExcel(items) {
 
           const imageId = workbook.addImage({ buffer, extension: ext });
 
-          // 图片嵌入 G 列，自适应
+          // 图片嵌入 H 列（图片列，col=7 为 0-based 第 8 列），自适应
           ws.addImage(imageId, {
-            tl: { col: 6, row: rowNum - 1 },
-            br: { col: 7, row: rowNum },
+            tl: { col: 7, row: rowNum - 1 },
+            br: { col: 8, row: rowNum },
             editAs: 'oneCell',
           });
           ws.getRow(rowNum).height = IMG_ROW_HEIGHT;
-          ws.getCell(rowNum, 7).value = ''; // 清除占位文字
+          ws.getCell(rowNum, 8).value = ''; // 清除占位文字
           downloaded++;
         } catch (imgErr) {
           failed++;
-          ws.getCell(rowNum, 7).value = '⚠ 嵌入失败';
+          ws.getCell(rowNum, 8).value = '⚠ 嵌入失败';
         }
       }
     }
