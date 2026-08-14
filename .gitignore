@@ -1,21 +1,21 @@
-﻿# 渚濊禆
+﻿# 忽略
 node_modules/
 
-# 鏋勫缓浜х墿
+# 构建产物
 dist/
 dist-electron/
 release-build/
 
-# 鐜鍙橀噺
+# 环境变量
 .env
 .env.local
 .env.production
 
-# 鏃ュ織
+# 日志
 *.log
 npm-debug.log*
 
-# 绯荤粺鏂囦欢
+# 系统文件
 Thumbs.db
 .DS_Store
 
@@ -29,20 +29,20 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 
-# 娴嬭瘯
+# 测试
 coverage/
 
-# 浜岃繘鍒舵枃浠?
+# 二进制文件
 *.exe
 *.blockmap
 *.pak
 *.dll
 *.ico
 
-# 瀵嗛挜锛堜笉涓婁紶浠撳簱锛?
+# 密钥（不上传仓库）
 token.txt
 
-# 涓存椂鏂囦欢
+# 临时文件
 *.tmp
 
 # IDE / AI 助手
@@ -54,3 +54,10 @@ xingbao-warehouse-*/
 app/update-test/node_modules/
 release-build/
 废弃/
+
+# 内部 AI 助手记忆（不公开到仓库）
+.workbuddy/
+
+# 一次性调试脚本（不公开到仓库）
+fix_query.py
+fix_storage.py
